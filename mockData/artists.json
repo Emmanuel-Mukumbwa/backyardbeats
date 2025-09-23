@@ -15,20 +15,44 @@
       {
         "id": 1001,
         "title": "aRelic ft Kaiser Ten - Bho",
-        "previewUrl": "/public_assets/tracks/aRelic ft Kaiser Ten - Bho.mp3",
+        "previewUrl": "/public_assets/tracks/aRelic ft Kaiser Ten - Bho .mp3",
         "duration": 120
       },
       {
         "id": 1002,
-        "title": "aRelic Balling (Prod. Yashie The Kid)",
-        "previewUrl": "/assets/tracks/aRelic_Balling_Prod_Yashie_The_Kid.mp3",
+        "title": "aRelic_Balling(Prod. Yashie The Kid)",
+        "previewUrl": "/public_assets/tracks/aRelic_Balling(Prod. Yashie The Kid).mp3",
         "duration": 140
       },
       {
         "id": 1003,
-        "title": "Pon De Beat (aRelic)",
-        "previewUrl": "/assets/tracks/Pon_De_Beat-aRelic_Prod_by_CYROME.mp3",
+        "title": "Pon De Beat-aRelic(Prod by CYROME)",
+        "previewUrl": "/public_assets/tracks/Pon De Beat-aRelic(Prod by CYROME).mp3",
         "duration": 125
+      },
+      {
+        "id": 1004,
+        "title": "aRelic_Born winner[Prod.Cjay][Official_Audio]",
+        "previewUrl": "/public_assets/tracks/aRelic_Born winner[Prod.Cjay][Official_Audio].mp3",
+        "duration": 130
+      },
+      {
+        "id": 1005,
+        "title": "aRelic_Ghetto(Prod. by JK Warrior)",
+        "previewUrl": "/public_assets/tracks/aRelic_Ghetto(Prod. by JK Warrior).mp3",
+        "duration": 128
+      },
+      {
+        "id": 1006,
+        "title": "aRelic_My Best Thing",
+        "previewUrl": "/public_assets/tracks/aRelic_My Best Thing.mp3",
+        "duration": 127
+      },
+      {
+        "id": 1007,
+        "title": "aRELIC_My BLESSING",
+        "previewUrl": "/public_assets/tracks/aRELIC_My BLESSING.mp3",
+        "duration": 126
       }
     ]
   },
@@ -48,14 +72,14 @@
     "tracks": [
       {
         "id": 2001,
-        "title": "PK moss - You Don't Know Me (ft aRelic)",
-        "previewUrl": "/assets/tracks/PK_moss_You_Don't_Know_Me_ft_aRelic_prodby_K-Driz.mp3",
+        "title": "PK moss_You Don't Know Me ft aRelic prodby K-Driz",
+        "previewUrl": "/public_assets/tracks/PK moss_You Don't Know Me ft aRelic prodby K-Driz.mp3",
         "duration": 130
       },
       {
         "id": 2002,
-        "title": "aRelic x PK Moss Dude 98 x Professor - Subject",
-        "previewUrl": "/assets/tracks/aRelic_x_Pk_Moss_Dude_98_x_Professor_Subject.mp3",
+        "title": "aRelic_x_Pk Moss Dude 98_x_Professor_Subject (1)",
+        "previewUrl": "/public_assets/tracks/aRelic_x_Pk Moss Dude 98_x_Professor_Subject (1).mp3",
         "duration": 150
       }
     ]
@@ -76,8 +100,8 @@
     "tracks": [
       {
         "id": 3001,
-        "title": "aRelic x PK Moss Dude 98 x Professor - Subject",
-        "previewUrl": "/assets/tracks/aRelic_x_Pk_Moss_Dude_98_x_Professor_Subject.mp3",
+        "title": "aRelic_x_Pk Moss Dude 98_x_Professor_Subject (1)",
+        "previewUrl": "/public_assets/tracks/aRelic_x_Pk Moss Dude 98_x_Professor_Subject (1).mp3",
         "duration": 150
       }
     ]
@@ -99,7 +123,7 @@
       {
         "id": 4001,
         "title": "aRelic ft Kaiser Ten - Bho",
-        "previewUrl": "/assets/tracks/aRelic_ft_Kaiser_Ten_-_Bho.mp3",
+        "previewUrl": "/public_assets/tracks/aRelic ft Kaiser Ten - Bho .mp3",
         "duration": 120
       }
     ]
@@ -120,8 +144,8 @@
     "tracks": [
       {
         "id": 5001,
-        "title": "Gazza - They Don't Know Me (or local Gazza track)",
-        "previewUrl": "/assets/tracks/Gazza_They_Don't_Know_Me.mp3",
+        "title": "Gazza {Chozen} Prod.Passion Jamz",
+        "previewUrl": "/public_assets/tracks/Gazza {Chozen} Prod.Passion Jamz.mp3",
         "duration": 135
       }
     ]
