@@ -1,4 +1,23 @@
-# Getting Started with Create React App
+
+# Backyard Beats
+
+This project is a music discovery platform for Malawian artists, built with React.
+
+## Audio Tracks and Assets
+
+All audio tracks are stored in the `public_assets/tracks/` directory. Track file names and paths are referenced directly in the `mockData/artists.json` file. When adding new tracks, ensure the file is placed in `public_assets/tracks/` and update the corresponding artist's `tracks` array in `artists.json` with the exact file name and path, e.g.:
+
+```json
+{
+	"title": "aRelic ft Kaiser Ten - Bho",
+	"previewUrl": "/public_assets/tracks/aRelic ft Kaiser Ten - Bho .mp3",
+	"duration": 120
+}
+```
+
+Track file names must match exactly (including spaces, punctuation, and capitalization) as they appear in the `public_assets/tracks/` folder.
+
+## Getting Started
 
 This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
 
