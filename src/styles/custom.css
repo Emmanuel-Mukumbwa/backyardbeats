@@ -1,0 +1,11 @@
+/* temporary card highlight when marker clicked */
+.card-highlight {
+  animation: cardFlash 1.4s ease-in-out;
+}
+
+@keyframes cardFlash {
+  0% { box-shadow: 0 0 0 rgba(40,167,69,0.0); transform: scale(1); }
+  10% { box-shadow: 0 4px 18px rgba(40,167,69,0.25); transform: scale(1.01); }
+  60% { box-shadow: 0 0 0 rgba(40,167,69,0.0); transform: scale(1); }
+  100% { box-shadow: 0 0 0 rgba(40,167,69,0.0); transform: scale(1); }
+}
