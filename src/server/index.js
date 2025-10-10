@@ -3,17 +3,18 @@ const express = require('express');
 const app = express();
 const db = require('./db');
 
-app.use(cors({
-  origin: 'http://localhost:3000',
-  credentials: true
-}));
-app.use(express.json());
 
 const cors = require('cors');
 app.use(cors({
   origin: 'http://localhost:3000',
   credentials: true
 }));
+
+app.use(cors({
+  origin: 'http://localhost:3000',
+  credentials: true
+}));
+app.use(express.json());
 
 // Routes
 app.use('/artists', require('./routes/artists'));

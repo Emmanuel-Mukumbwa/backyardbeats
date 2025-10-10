@@ -69,13 +69,7 @@ export default function Register() {
             </Form.Select>
           </Form.Group>
 
-          <Form.Group className="mb-3">
-            <Form.Label>District</Form.Label>
-            <Form.Select value={district} onChange={e => setDistrict(e.target.value)}>
-              <option value="">Select district (optional)</option>
-              {DISTRICTS.map(d => <option key={d} value={d}>{d}</option>)}
-            </Form.Select>
-          </Form.Group>
+        
 
           <div className="d-grid">
             <Button variant="success" type="submit" disabled={loading}>{loading ? 'Creating...' : 'Create account'}</Button>
