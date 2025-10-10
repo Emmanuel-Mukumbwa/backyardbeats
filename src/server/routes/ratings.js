@@ -6,6 +6,10 @@ router.get('/', ratingsController.list);
 router.get('/:id', ratingsController.get);
 router.post('/', ratingsController.create);
 router.put('/:id', ratingsController.update);
-router.delete('/:id', ratingsController.remove);
+const auth = require('../middleware/auth');
+const requireRole = require('../middleware/requireRole');
+
+// Only admin or owner can delete rating
+router.delete('/:id', auth, requireRole(['admin', 'artist']), ratingsController.remove);
 
 module.exports = router;

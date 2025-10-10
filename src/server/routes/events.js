@@ -4,8 +4,11 @@ const eventsController = require('../controllers/eventsController');
 
 router.get('/', eventsController.list);
 router.get('/:id', eventsController.get);
-router.post('/', eventsController.create);
-router.put('/:id', eventsController.update);
-router.delete('/:id', eventsController.remove);
+const auth = require('../middleware/auth');
+const requireRole = require('../middleware/requireRole');
+
+router.post('/', auth, requireRole(['artist', 'admin']), eventsController.create);
+router.put('/:id', auth, requireRole(['artist', 'admin']), eventsController.update);
+router.delete('/:id', auth, requireRole(['artist', 'admin']), eventsController.remove);
 
 module.exports = router;
