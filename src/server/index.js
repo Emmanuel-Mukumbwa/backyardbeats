@@ -4,6 +4,12 @@ const db = require('./db');
 
 app.use(express.json());
 
+const cors = require('cors');
+app.use(cors({
+  origin: 'http://localhost:3000',
+  credentials: true
+}));
+
 // Routes
 app.use('/artists', require('./routes/artists'));
 app.use('/tracks', require('./routes/tracks'));
