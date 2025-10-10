@@ -1,8 +1,9 @@
 // File: src/pages/Login.jsx
-import React, { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import React, { useState, useContext } from 'react';
+import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { Form, Button, Card } from 'react-bootstrap';
 import axios from '../api/axiosConfig';
+import { AuthContext } from '../context/AuthContext';
 
 export default function Login() {
   const [username, setUsername] = useState('');
@@ -10,6 +11,8 @@ export default function Login() {
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+  const location = useLocation();
+  const { login } = useContext(AuthContext);
 
   const submit = async (e) => {
     e.preventDefault();
@@ -17,9 +20,27 @@ export default function Login() {
     setError(null);
     try {
       const res = await axios.post('/auth/login', { username, password });
-      localStorage.setItem('bb_token', res.data.token);
-      localStorage.setItem('bb_user', JSON.stringify(res.data.user));
-      navigate('/');
+      // Save user in AuthContext and localStorage
+      login({ ...res.data.user, token: res.data.token });
+
+      // Role-based redirect
+      const redirectTo = new URLSearchParams(location.search).get('redirectTo');
+      if (redirectTo) {
+        navigate(redirectTo, { replace: true });
+        return;
+      }
+      if (res.data.user.role === 'artist') {
+        // If artist has no profile, redirect to onboarding
+        if (!res.data.user.hasProfile) {
+          navigate('/onboard', { replace: true });
+        } else {
+          navigate('/artist/dashboard', { replace: true });
+        }
+      } else if (res.data.user.role === 'admin') {
+        navigate('/admin', { replace: true });
+      } else {
+        navigate('/', { replace: true });
+      }
     } catch (err) {
       setError(err.response?.data?.error || err.message || 'Login failed');
     } finally {
