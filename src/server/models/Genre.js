@@ -1,12 +1,12 @@
 const { DataTypes } = require('sequelize');
 const sequelize = require('../db');
 
-const District = sequelize.define('District', {
+const Genre = sequelize.define('Genre', {
   id: { type: DataTypes.INTEGER.UNSIGNED, primaryKey: true, autoIncrement: true },
   name: { type: DataTypes.STRING(100), allowNull: false, unique: true }
 }, {
-  tableName: 'districts',
+  tableName: 'genres',
   timestamps: false
 });
 
-module.exports = District;
+module.exports = Genre;

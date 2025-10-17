@@ -1,44 +1,87 @@
+// server/index.js
+/**
+ * Main server bootstrap
+ * - Serves uploaded files at /uploads
+ * - Mounts API routes including artist onboarding
+ * - Connects to the database via server/db.js
+ */
 
 const express = require('express');
 const app = express();
-const db = require('./db');
-
-
+const db = require('./db'); // sequelize instance + pool
 const cors = require('cors');
+const path = require('path');
+
+const FRONTEND_ORIGIN = process.env.FRONTEND_ORIGIN || 'http://localhost:3000';
+const UPLOADS_DIR = path.join(__dirname, 'uploads');
+
 app.use(cors({
-  origin: 'http://localhost:3000',
+  origin: FRONTEND_ORIGIN,
   credentials: true
 }));
 
-app.use(cors({
-  origin: 'http://localhost:3000',
-  credentials: true
-}));
+// Parse JSON bodies and URL-encoded (forms)
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
-// Routes
-app.use('/artists', require('./routes/artists'));
-app.use('/tracks', require('./routes/tracks'));
-app.use('/events', require('./routes/events'));
-app.use('/users', require('./routes/users'));
-app.use('/ratings', require('./routes/ratings'));
-app.use('/districts', require('./routes/districts'));
-app.use('/auth', require('./routes/auth'));
+// Serve uploaded files (artist photos, track files, etc.) at /uploads/*
+app.use('/uploads', express.static(UPLOADS_DIR, {
+  index: false,
+  maxAge: '7d'
+}));
 
-// Error handling middleware
+// Routes (make sure these files exist)
+app.use('/artists', require('./routes/artists.routes'));
+app.use('/tracks', require('./routes/tracks.routes'));
+app.use('/events', require('./routes/events.routes'));
+app.use('/users', require('./routes/users.routes'));
+app.use('/ratings', require('./routes/ratings.routes'));
+app.use('/districts', require('./routes/districts.routes'));
+app.use('/auth', require('./routes/auth.routes'));
+
+// artist onboarding router (if present)
+try {
+  app.use('/artist', require('./routes/artistOnboard.routes'));
+} catch (e) {
+  // If the onboarding route isn't present yet, ignore — app will still run
+  // eslint-disable-next-line no-console
+  console.warn('Artist onboard routes not mounted:', e.message || e);
+}
+
+// Basic health check
+app.get('/health', (req, res) => {
+  res.json({ status: 'ok', uptime: process.uptime() });
+});
+
+// Error handling middleware (keeps your existing handler)
 app.use((err, req, res, next) => {
-  console.error(err.stack);
-  res.status(500).json({ error: 'Internal Server Error' });
+  console.error('Error:', err && (err.message || err));
+  if (!res.headersSent) {
+    res.status(500).json({ error: 'Internal Server Error' });
+  } else {
+    next(err);
+  }
 });
 
 const PORT = process.env.PORT || 3001;
-db.authenticate()
-  .then(() => {
-    console.log('Successfully connected to MySQL database!');
+
+const startServer = async () => {
+  try {
+    if (typeof db.testConnection === 'function') {
+      await db.testConnection();
+    } else if (typeof db.authenticate === 'function') {
+      await db.authenticate();
+      console.log('✅ Successfully connected to MySQL database.');
+    }
+
     app.listen(PORT, () => {
       console.log(`Server running on port ${PORT}`);
+      console.log(`Serving uploads from ${UPLOADS_DIR} at /uploads`);
     });
-  })
-  .catch((err) => {
+  } catch (err) {
     console.error('Database connection failed:', err);
-  });
+    process.exit(1);
+  }
+};
+
+startServer();

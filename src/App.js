@@ -9,11 +9,13 @@ import Login from './pages/Login';
 import Register from './pages/Register';
 import Orientation from './pages/Orientation';
 import ArtistOnboarding from './pages/ArtistOnboarding';
+import ArtistDashboard from './pages/ArtistDashboard';
+import FanDashboard from './pages/FanDashboard';
 import AdminDashboard from './pages/AdminDashboard';
 import { AuthProvider } from './context/AuthContext';
 import RequireAuth from './components/RequireAuth';
 import RequireRole from './components/RequireRole';
-
+ 
 export default function App() {
   return (
     <AuthProvider>
@@ -37,8 +39,14 @@ export default function App() {
             <Route path="/artist/dashboard" element={
               <RequireAuth>
                 <RequireRole roles={["artist"]}>
-                  {/* TODO: Add ArtistDashboard component */}
-                  <div>Artist Dashboard (coming soon)</div>
+                  <ArtistDashboard />
+                </RequireRole>
+              </RequireAuth>
+            } />
+            <Route path="/fan/dashboard" element={
+              <RequireAuth>
+                <RequireRole roles={["fan"]}>
+                  <FanDashboard />
                 </RequireRole>
               </RequireAuth>
             } />

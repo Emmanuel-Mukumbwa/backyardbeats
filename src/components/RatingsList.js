@@ -1,3 +1,4 @@
+//src/components/RatingsList.js
 import React, { useEffect, useState } from 'react';
 import axios from '../api/axiosConfig';
 
@@ -14,7 +15,7 @@ export default function RatingsList({ artistId, refreshKey = 0 }) {
       })
       .catch(() => {
         if (!cancelled) setRatings([]);
-      })
+      }) 
       .finally(() => {
         if (!cancelled) setLoading(false);
       });

@@ -1,11 +1,14 @@
-import React, { useEffect, useState } from 'react';
+// src/pages/Home.jsx
+import React, { useEffect, useState, useContext } from 'react';
 import axios from '../api/axiosConfig';
 import ArtistCard from '../components/ArtistCard';
 import MapView from '../components/MapView';
 import FeaturedCarousel from '../components/FeaturedCarousel';
 import FilterBar from '../components/FilterBar';
-import { Button } from 'react-bootstrap';
+import { Button, Alert } from 'react-bootstrap';
 import Hero from '../components/Hero';
+import { AuthContext } from '../context/AuthContext';
+import { Link } from 'react-router-dom';
 
 export default function Home() {
   const [artists, setArtists] = useState([]);
@@ -14,6 +17,8 @@ export default function Home() {
   const [filters, setFilters] = useState({ district: '', genre: '', mood: '' });
   const [loading, setLoading] = useState(false);
   const [selectedId, setSelectedId] = useState(null);
+
+  const { user } = useContext(AuthContext);
 
   useEffect(() => {
     loadArtists();
@@ -31,8 +36,11 @@ export default function Home() {
   function loadArtists(params = {}) {
     setLoading(true);
     axios.get('/artists', { params })
-      .then(res => setArtists(res.data))
-      .catch(err => console.error(err))
+      .then(res => setArtists(res.data || []))
+      .catch(err => {
+        console.error(err);
+        setArtists([]);
+      })
       .finally(() => setLoading(false));
   }
 
@@ -64,10 +72,26 @@ export default function Home() {
     }
   }
 
+  // Normalize has_profile flag name
+  const artistHasProfile = user && (user.has_profile === true || user.hasProfile === true);
+
   return (
     <div>
       {/* Hero / intro section */}
       <Hero />
+
+      {/* If logged-in user is an artist but hasn't finished onboarding, show CTA */}
+      {user?.role === 'artist' && !artistHasProfile && (
+        <Alert variant="success" className="d-flex align-items-center justify-content-between">
+          <div>
+            <strong>Welcome, {user.username || user.displayName || 'artist'}</strong>
+            <div className="small">Complete your artist profile to upload tracks and manage events.</div>
+          </div>
+          <div>
+            <Button as={Link} to="/onboard" variant="light">Get started</Button>
+          </div>
+        </Alert>
+      )}
 
       <h2 className="mb-3">Discover Local Artists</h2>
 

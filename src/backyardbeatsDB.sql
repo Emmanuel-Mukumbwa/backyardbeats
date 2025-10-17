@@ -1,7 +1,8 @@
+//src/backyardbeatsDB.sql
 use backyardbeatsDB;
 
 CREATE TABLE districts (
-  id INT AUTO_INCREMENT PRIMARY KEY,
+  id INT AUTO_INCREMENT PRIMARY KEY, 
   name VARCHAR(50) NOT NULL UNIQUE
 );
 
@@ -12,23 +13,29 @@ CREATE TABLE `users` (
   `password_hash` varchar(255) NOT NULL,
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
   `role` enum('fan','artist','admin') NOT NULL DEFAULT 'fan',
+  `has_profile` tinyint(1) DEFAULT '0',
   PRIMARY KEY (`id`),
   UNIQUE KEY `username` (`username`),
   UNIQUE KEY `email` (`email`)
-);
+) ENGINE=InnoDB AUTO_INCREMENT=5 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
 
-CREATE TABLE artists (
-  id INT PRIMARY KEY,
-  display_name VARCHAR(100) NOT NULL,
-  bio TEXT,
-  photo_url VARCHAR(255),
-  lat DECIMAL(9,6),
-  lng DECIMAL(9,6),
-  district_id INT,
-  avg_rating DECIMAL(3,2),
-  has_upcoming_event BOOLEAN DEFAULT FALSE,
-  FOREIGN KEY (district_id) REFERENCES districts(id)
-);
+CREATE TABLE `artists` (
+  `id` int NOT NULL,
+  `display_name` varchar(100) NOT NULL,
+  `bio` text,
+  `photo_url` varchar(255) DEFAULT NULL,
+  `lat` decimal(9,6) DEFAULT NULL,
+  `lng` decimal(9,6) DEFAULT NULL,
+  `district_id` int DEFAULT NULL,
+  `avg_rating` decimal(3,2) DEFAULT NULL,
+  `has_upcoming_event` tinyint(1) DEFAULT '0',
+  `user_id` int DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `district_id` (`district_id`),
+  KEY `fk_artists_user` (`user_id`),
+  CONSTRAINT `artists_ibfk_1` FOREIGN KEY (`district_id`) REFERENCES `districts` (`id`),
+  CONSTRAINT `fk_artists_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
 
 CREATE TABLE tracks (
   id INT PRIMARY KEY,
