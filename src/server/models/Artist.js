@@ -16,7 +16,7 @@ const Artist = sequelize.define('Artist', {
   bio: {
     type: DataTypes.TEXT,
     allowNull: true
-  },
+  }, 
   photo_url: {
     type: DataTypes.STRING(255),
     allowNull: true
