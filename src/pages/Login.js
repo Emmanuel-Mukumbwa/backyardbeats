@@ -71,7 +71,7 @@ export default function Login() {
         }
       } catch (e) {
         console.error('❌ Error saving to localStorage:', e);
-      }
+      } 
 
       setSuccess('Login successful! Redirecting...');
       
@@ -190,3 +190,4 @@ export default function Login() {
     </>
   );
 }
+ 
