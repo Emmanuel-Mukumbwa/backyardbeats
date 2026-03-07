@@ -9,7 +9,7 @@ const JWT_EXPIRY = process.env.JWT_EXPIRY || '24h';
 
 // Register
 exports.register = async (req, res, next) => {
-  try {
+  try { 
     const { username, email, password, role } = req.body;
     if (!username || !email || !password) {
       return res.status(400).json({ error: 'Please fill in all required fields.' });
