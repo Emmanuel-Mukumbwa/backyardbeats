@@ -27,4 +27,4 @@ router.post('/artist/:id', auth, ratingsController.postRatingForArtist);
 router.post('/artists/:id/ratings', auth, ratingsController.postRatingForArtist);
 
 module.exports = router;
-
+ 
