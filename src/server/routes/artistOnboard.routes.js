@@ -1,5 +1,5 @@
 // src/server/routes/artistOnboard.routes.js
-const express = require('express');
+const express = require('express'); 
 const router = express.Router();
 const auth = require('../middleware/auth.middleware');
 const controller = require('../controllers/artistOnboard.controller');
@@ -16,3 +16,4 @@ router.post('/onboard', uploadFields([{ name: 'photo', maxCount: 1 }]), controll
 router.get('/me', controller.getMyProfile);
 
 module.exports = router;
+ 
