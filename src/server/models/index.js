@@ -1,3 +1,4 @@
+// src/server/models/index.js
 const sequelize = require('../db');
 
 // Import all models
@@ -7,7 +8,7 @@ const Genre = require('./Genre');
 const ArtistGenre = require('./ArtistGenre');
 const District = require('./District');
 const Event = require('./Event');
-const Rating = require('./Rating');
+const Rating = require('./Rating'); 
 const Track = require('./Track');
 
 // Define associations
@@ -39,3 +40,4 @@ module.exports = {
   Rating,
   Track
 };
+ 
