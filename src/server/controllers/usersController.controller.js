@@ -1,3 +1,4 @@
+// src/server/controllers/usersController.controller.js
 const User = require('../models/User');
 
 exports.list = async (req, res, next) => {
