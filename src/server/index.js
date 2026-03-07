@@ -1,3 +1,4 @@
+// src/server/index.js
 /**
  * Main server bootstrap
  * - Serves uploaded files at /uploads
@@ -35,25 +36,18 @@ app.use('/uploads', express.static(UPLOADS_DIR, {
   maxAge: '7d'
 }));
 
-// Routes (make sure these files exist)
+app.use('/artistOnboard', require('./routes/artistOnboard.routes'));
+
+
+// Then mount other routes
 app.use('/artists', require('./routes/artists.routes'));
 app.use('/tracks', require('./routes/tracks.routes'));
-app.use('/events', require('./routes/events.routes'));  
+app.use('/events', require('./routes/events.routes'));
 app.use('/users', require('./routes/users.routes'));
-app.use('/', require('./routes/ratings.routes'));
+app.use('/', require('./routes/ratings.routes'));   // this contains /artist/:id
 app.use('/districts', require('./routes/districts.routes'));
 app.use('/auth', require('./routes/auth.routes'));
 app.use('/favorites', require('./routes/favorites.routes'));
-
-// artist onboarding router (if present)
-try {
-  app.use('/artist', require('./routes/artistOnboard.routes'));
-  console.log('Mounted /artist routes');
-} catch (e) {
-  // If the onboarding route isn't present yet, ignore — app will still run
-  // eslint-disable-next-line no-console
-  console.warn('Artist onboard routes not mounted:', e.message || e);
-}
 
 // Basic health check
 app.get('/health', (req, res) => {
