@@ -3,7 +3,34 @@ const pool = require('../db').pool;
 const path = require('path');
 
 const UPLOADS_PREFIX = process.env.UPLOADS_PREFIX || '/uploads';
+// kept for backward compatibility/awareness but we won't rely on it for file URLs
 const EVENT_IMAGE_SUBDIR = path.posix.join('events', 'images');
+
+// local uploads base (filesystem path) — matches how your upload middleware creates folders
+const UPLOAD_BASE = path.join(__dirname, '..', 'uploads');
+
+/**
+ * Convert an absolute server filesystem path for an uploaded file into a public URL
+ * under the UPLOADS_PREFIX. Handles Windows/posix separators.
+ *
+ * Example:
+ *   filePath = /srv/app/src/server/uploads/events/images/img-1.jpg
+ *   -> /uploads/events/images/img-1.jpg
+ */
+function publicUrlFromFilePath(filePath) {
+  if (!filePath) return null;
+  try {
+    // compute path relative to uploads base
+    const rel = path.relative(UPLOAD_BASE, filePath);
+    if (!rel) return null;
+    // ensure forward-slashes for URL
+    const urlPath = rel.split(path.sep).join('/');
+    return path.posix.join(UPLOADS_PREFIX, urlPath);
+  } catch (err) {
+    // fallback: try to use filename directly under expected subdir
+    return null;
+  }
+}
 
 function normalizeEventRow(row) {
   return {
@@ -113,7 +140,8 @@ exports.createEvent = async (req, res, next) => {
 
     // image handled by multer single('image') -> available as req.file
     const imageFile = req.file;
-    const imageUrl = imageFile ? path.posix.join(UPLOADS_PREFIX, EVENT_IMAGE_SUBDIR, imageFile.filename) : null;
+    // build public URL from actual saved file path (works regardless of which storage wrote it)
+    const imageUrl = imageFile ? publicUrlFromFilePath(imageFile.path) : null;
 
     // Gather fields from body
     const title = req.body.title ? String(req.body.title).trim() : null;
@@ -189,7 +217,7 @@ exports.updateEvent = async (req, res, next) => {
 
     // image file (if uploaded)
     const imageFile = req.file;
-    const imageUrl = imageFile ? path.posix.join(UPLOADS_PREFIX, EVENT_IMAGE_SUBDIR, imageFile.filename) : null;
+    const imageUrl = imageFile ? publicUrlFromFilePath(imageFile.path) : null;
 
     // gather potential updates:
     const updates = [];
