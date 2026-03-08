@@ -16,7 +16,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import axios from '../api/axiosConfig';
 import { AuthContext } from '../context/AuthContext';
-import AudioPlayer from '../components/AudioPlayer';
+import AudioPlayer from '../components/AudioPlayer'; 
 import RatingsList from '../components/RatingsList';
 import DISTRICTS from '../data/districts';
 import AddTrackModal from '../components/AddTrackModal';
