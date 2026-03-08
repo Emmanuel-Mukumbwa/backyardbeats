@@ -183,7 +183,7 @@ export default function ArtistOnboarding() {
           bio: bio.trim(),
           district_id: resolvedDistrictId,
           district,
-          genres,
+          genres, 
           photoFileName: photoFile ? photoFile.name : null
         });
       }

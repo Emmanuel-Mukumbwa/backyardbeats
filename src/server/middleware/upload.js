@@ -59,7 +59,10 @@ function createStorage(folder, prefix = '') {
    --------------------------- */
 
 // Image uploader for artist photos, event images, etc.
-// Use as: imageUpload.single('photo') or imageUpload.single('image')
+// Keep the existing artist photo uploader (img- prefix)
+// NOTE: this original imageUpload is bound to single('image') in your current code.
+// If you use this middleware in routes for events it will save into ARTIST_PHOTOS_DIR.
+// To avoid that, use eventImageUpload (below) specifically for event image uploads.
 const imageStorage = createStorage(ARTIST_PHOTOS_DIR, 'img-');
 const imageUpload = multer({
   storage: imageStorage,
@@ -70,10 +73,22 @@ const imageUpload = multer({
     }
     cb(null, true);
   }
-}).single('image'); // default middleware is single('image') - you can call imageUpload() directly in routes
+}).single('image'); // default middleware is single('image') - keep for backward compatibility
+
+// Dedicated event image uploader -> writes to /uploads/events/images
+const eventImageStorage = createStorage(EVENTS_IMAGES_DIR, 'evt-');
+const eventImageUpload = multer({
+  storage: eventImageStorage,
+  limits: { fileSize: 8 * 1024 * 1024 }, // 8 MB for event images (adjust as needed)
+  fileFilter: (req, file, cb) => {
+    if (!file.mimetype || !file.mimetype.startsWith('image/')) {
+      return cb(new multer.MulterError('LIMIT_UNEXPECTED_FILE', 'Event image must be an image type'));
+    }
+    cb(null, true);
+  }
+}).single('image'); // this expects the field name 'image' in the form
 
 // Audio uploader for track files
-// Use as: audioUpload.single('file')
 const audioStorage = createStorage(TRACKS_DIR, 'trk-');
 const audioUpload = multer({
   storage: audioStorage,
@@ -153,16 +168,13 @@ function uploadFields(fieldsArray = []) {
 
 /* ---------------------------
    Exports
-   - audioUpload: middleware (single 'file') -> use as audioUpload in routes or audioUpload.single('file') if you want
-   - imageUpload: middleware (single 'image') -> use as imageUpload in routes or imageUpload.single('image')
-   - uploadFields(fieldsArray): returns middleware to accept multiple fields in one request
-   - paths for convenience (UPLOAD_BASE, TRACKS_DIR, ARTIST_PHOTOS_DIR)
    --------------------------- */
 
 module.exports = {
-  // dedicated single-file middlewares (already bound to single('file') / single('image'))
+  // dedicated single-file middlewares
   audioUpload,     // default: single('file') middleware
-  imageUpload,     // default: single('image') middleware
+  imageUpload,     // original image middleware (writes to artist photos by default)
+  eventImageUpload, // new middleware: single('image') -> writes to uploads/events/images
 
   // helper to create a .fields() middleware for mixed uploads
   uploadFields,    // call like uploadFields([{ name:'file', maxCount:1 }, { name:'artwork', maxCount:1 }])

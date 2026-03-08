@@ -14,6 +14,6 @@ router.post('/onboard', uploadFields([{ name: 'photo', maxCount: 1 }]), controll
 
 // GET /artist/me
 router.get('/me', controller.getMyProfile);
-
+ 
 module.exports = router;
  
