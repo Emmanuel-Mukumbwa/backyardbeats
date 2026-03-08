@@ -1,21 +1,15 @@
 // src/components/AudioPlayer.jsx
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useRef, useState, useEffect, useRef as useRefHook } from 'react';
 import axios from '../api/axiosConfig';
 import { FaPlay, FaPause, FaStepForward, FaStepBackward } from 'react-icons/fa';
 import { Image } from 'react-bootstrap';
 
 /**
- * AudioPlayer
- * - Shows artwork for the current track (resolves relative paths to backend base)
- * - Keeps previous behavior: play/pause, prev/next, progress, duration, error handling
- *
  * Props:
- * - tracks: array of track objects. Supported preview fields:
- *    preview_url, previewUrl, file_url, file_url
- *   Supported artwork fields:
- *    artwork_url, preview_artwork, artworkUrl, cover_url
+ * - tracks: []
+ * - onPlay?: function(track)  // called when playback starts for a track (use to record listen)
  */
-export default function AudioPlayer({ tracks = [] }) {
+export default function AudioPlayer({ tracks = [], onPlay = null }) {
   const audioRef = useRef(null);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [playing, setPlaying] = useState(false);
@@ -23,9 +17,10 @@ export default function AudioPlayer({ tracks = [] }) {
   const [duration, setDuration] = useState(0);
   const [error, setError] = useState(null);
 
+  const prevPlayingRef = useRefHook(false);
+
   const current = tracks && tracks.length > 0 ? tracks[currentIndex] : null;
 
-  // backend base (mirror ArtistDashboard / other components)
   const backendBase = (() => {
     try {
       return (axios && axios.defaults && axios.defaults.baseURL) || process.env.REACT_APP_API_URL || 'http://localhost:3001';
@@ -34,19 +29,14 @@ export default function AudioPlayer({ tracks = [] }) {
     }
   })().replace(/\/$/, '');
 
-  // get preview/raw audio path from track object
   const getPreviewRaw = (t) => {
     if (!t) return '';
     return t.previewUrl || t.preview_url || t.file_url || t.preview || '';
   };
-
-  // get artwork raw path
   const getArtworkRaw = (t) => {
     if (!t) return '';
     return t.artwork_url || t.preview_artwork || t.artworkUrl || t.cover_url || t.cover || '';
   };
-
-  // resolve raw path to absolute URL on backend (handles absolute urls, '/...' and 'uploads/...' and bare filename)
   const resolveToBackend = (raw) => {
     if (!raw) return '';
     if (/^https?:\/\//i.test(raw)) return raw;
@@ -55,7 +45,6 @@ export default function AudioPlayer({ tracks = [] }) {
     return `${backendBase}/uploads/${raw}`;
   };
 
-  // load current track into audio element whenever currentIndex or track changes
   useEffect(() => {
     const audio = audioRef.current;
     setError(null);
@@ -74,7 +63,6 @@ export default function AudioPlayer({ tracks = [] }) {
       return;
     }
 
-    // set crossOrigin if backend origin differs (helps with CORS/media errors when needed)
     try {
       const backendOrigin = new URL(backendBase).origin;
       if (window.location.origin !== backendOrigin) audio.crossOrigin = 'anonymous';
@@ -86,7 +74,6 @@ export default function AudioPlayer({ tracks = [] }) {
     audio.src = src;
     try {
       audio.load();
-      // if previously playing, attempt to play the new track
       if (playing) {
         audio.play().catch(err => {
           console.warn('Auto-play blocked or failed', err);
@@ -101,7 +88,7 @@ export default function AudioPlayer({ tracks = [] }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentIndex, current?.id, backendBase]);
 
-  // attach audio events
+  // audio event listeners
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
@@ -115,7 +102,6 @@ export default function AudioPlayer({ tracks = [] }) {
       }
     }
     function onEnd() {
-      // auto advance if possible
       if (currentIndex < tracks.length - 1) {
         setCurrentIndex(i => i + 1);
         setPlaying(true);
@@ -141,6 +127,21 @@ export default function AudioPlayer({ tracks = [] }) {
       audio.removeEventListener('error', onError);
     };
   }, [audioRef, currentIndex, tracks]);
+
+  // call onPlay when playback starts for the current track
+  useEffect(() => {
+    // Detect transition from not-playing -> playing, and only then call onPlay
+    if (playing && !prevPlayingRef.current && typeof onPlay === 'function' && current) {
+      try {
+        // call onPlay async, but don't block UI
+        onPlay(current).catch?.(() => {});
+      } catch (e) {
+        // if onPlay is sync, ignore errors
+      }
+    }
+    prevPlayingRef.current = playing;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [playing, currentIndex, current]);
 
   async function togglePlay() {
     const audio = audioRef.current;
@@ -172,7 +173,6 @@ export default function AudioPlayer({ tracks = [] }) {
     setPlaying(true);
   }
 
-  // click a track in the optional mini-list (if you want to show a selectable list later)
   function selectIndex(i) {
     if (i < 0 || i >= tracks.length) return;
     setCurrentIndex(i);
@@ -186,7 +186,6 @@ export default function AudioPlayer({ tracks = [] }) {
   return (
     <div className="card p-3">
       <div className="d-flex align-items-center">
-        {/* Artwork */}
         <div style={{ width: 96, height: 96, flexShrink: 0, marginRight: 16 }}>
           <Image
             src={artworkUrl || artworkFallback}
@@ -200,7 +199,6 @@ export default function AudioPlayer({ tracks = [] }) {
           />
         </div>
 
-        {/* Main controls and info */}
         <div className="flex-grow-1">
           <div className="d-flex align-items-center justify-content-between">
             <div>
@@ -242,7 +240,6 @@ export default function AudioPlayer({ tracks = [] }) {
             </div>
           </div>
 
-          {/* Progress */}
           <div className="mt-3">
             <div className="progress" style={{ height: 8 }}>
               <div
@@ -264,7 +261,6 @@ export default function AudioPlayer({ tracks = [] }) {
         </div>
       </div>
 
-      {/* Hidden audio element */}
       <audio ref={audioRef} preload="auto" />
     </div>
   );
