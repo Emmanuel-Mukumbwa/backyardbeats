@@ -53,7 +53,7 @@ export default function ArtistDashboard() {
     setError(null);
     try {
       const [artistRes, tracksRes, eventsRes] = await Promise.all([
-        axios.get('/artist/me'),
+        axios.get('/profile/me'),
         axios.get('/tracks'),
         axios.get('/events'),
       ]);
@@ -134,6 +134,18 @@ export default function ArtistDashboard() {
     if (raw.startsWith('/')) return `${backendBase}${raw}`;
     if (raw.startsWith('uploads/')) return `${backendBase}/${raw}`;
     return `${backendBase}/uploads/${raw}`;
+  };
+
+  // put this right after resolveToBackend in ArtistDashboard.jsx
+  const getEventImageRaw = (ev) => {
+    if (!ev) return null;
+    // try common column names — adjust if your events controller returns a different name
+    return ev.image_url || ev.image || ev.cover_url || ev.photo || ev.imagePath || ev.image_path || null;
+  };
+
+  const resolveEventImage = (ev) => {
+    const raw = getEventImageRaw(ev);
+    return raw ? resolveToBackend(raw) : null;
   };
 
   // avatar src: prefer stored photo path if present; fallback to ui-avatars
@@ -277,6 +289,7 @@ export default function ArtistDashboard() {
             <Table striped hover responsive className="mb-3">
               <thead>
                 <tr>
+                  <th style={{ width: 80 }}>Artwork</th>
                   <th>Title</th>
                   <th>Duration</th>
                   <th>Genre</th>
@@ -286,10 +299,27 @@ export default function ArtistDashboard() {
               <tbody>
                 {tracks.map(track => (
                   <tr key={track.id}>
-                    <td>{track.title}</td>
-                    <td>{track.duration ? `${track.duration}s` : '-'}</td>
-                    <td>{track.genre || '-'}</td>
-                    <td>
+                    {/* artwork thumbnail */}
+                    <td className="align-middle">
+                      {track.artwork_url ? (
+                        <Image
+                          src={resolveToBackend(track.artwork_url)}
+                          rounded
+                          style={{ width: 64, height: 64, objectFit: 'cover' }}
+                          onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(track.title || 'Track')}&background=ccc&color=333&size=128`; }}
+                          alt={`${track.title || 'Track'} artwork`}
+                        />
+                      ) : (
+                        <div style={{ width: 64, height: 64, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f1f3f5', color: '#6c757d', borderRadius: 6 }}>
+                          <FaMusic />
+                        </div>
+                      )}
+                    </td>
+
+                    <td className="align-middle">{track.title}</td>
+                    <td className="align-middle">{track.duration ? `${track.duration}s` : '-'}</td>
+                    <td className="align-middle">{track.genre || '-'}</td>
+                    <td className="align-middle">
                       <div className="d-flex gap-2">
                         <Button size="sm" variant="outline-primary" onClick={() => { setEditingTrack(track); setShowTrackModal(true); }}>
                           <FaEdit className="me-1" /> Edit
@@ -303,7 +333,7 @@ export default function ArtistDashboard() {
                 ))}
                 {tracks.length === 0 && (
                   <tr>
-                    <td colSpan={4} className="text-center text-muted">No tracks yet — add your first track.</td>
+                    <td colSpan={5} className="text-center text-muted">No tracks yet — add your first track.</td>
                   </tr>
                 )}
               </tbody>
@@ -334,6 +364,7 @@ export default function ArtistDashboard() {
             <Table striped hover responsive>
               <thead>
                 <tr>
+                  <th style={{ width: 80 }}>Image</th>
                   <th>Title</th>
                   <th>Date</th>
                   <th>District</th>
@@ -342,27 +373,49 @@ export default function ArtistDashboard() {
                 </tr>
               </thead>
               <tbody>
-                {events.map(ev => (
-                  <tr key={ev.id}>
-                    <td>{ev.title}</td>
-                    <td>{ev.event_date ? new Date(ev.event_date).toLocaleDateString() : '-'}</td>
-                    <td>{ev.district_id ? DISTRICTS[ev.district_id - 1] : '-'}</td>
-                    <td>{ev.venue || '-'}</td>
-                    <td>
-                      <div className="d-flex gap-2">
-                        <Button size="sm" variant="outline-primary" onClick={() => { setEditingEvent(ev); setShowEventModal(true); }}>
-                          <FaEdit className="me-1" /> Edit
-                        </Button>
-                        <Button size="sm" variant="outline-danger" onClick={() => deleteEvent(ev.id)}>
-                          <FaTrash className="me-1" /> Delete
-                        </Button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                {events.map(ev => {
+                  const imgSrc = resolveEventImage(ev);
+                  return (
+                    <tr key={ev.id}>
+                      <td className="align-middle">
+                        {imgSrc ? (
+                          // clickable thumbnail to open full image in new tab
+                          <a href={imgSrc} target="_blank" rel="noreferrer">
+                            <Image
+                              src={imgSrc}
+                              rounded
+                              style={{ width: 64, height: 64, objectFit: 'cover' }}
+                              onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(ev.title || 'Event')}&background=eee&color=777&size=128`; }}
+                              alt={`${ev.title || 'Event'} image`}
+                            />
+                          </a>
+                        ) : (
+                          <div style={{ width: 64, height: 64, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f1f3f5', color: '#6c757d', borderRadius: 6 }}>
+                            <FaCalendarAlt />
+                          </div>
+                        )}
+                      </td>
+
+                      <td className="align-middle">{ev.title}</td>
+                      <td className="align-middle">{ev.event_date ? new Date(ev.event_date).toLocaleDateString() : '-'}</td>
+                      <td className="align-middle">{ev.district_id ? DISTRICTS[ev.district_id - 1] : '-'}</td>
+                      <td className="align-middle">{ev.venue || '-'}</td>
+                      <td className="align-middle">
+                        <div className="d-flex gap-2">
+                          <Button size="sm" variant="outline-primary" onClick={() => { setEditingEvent(ev); setShowEventModal(true); }}>
+                            <FaEdit className="me-1" /> Edit
+                          </Button>
+                          <Button size="sm" variant="outline-danger" onClick={() => deleteEvent(ev.id)}>
+                            <FaTrash className="me-1" /> Delete
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
                 {events.length === 0 && (
                   <tr>
-                    <td colSpan={5} className="text-center text-muted">No events yet — create your first event.</td>
+                    <td colSpan={6} className="text-center text-muted">No events yet — create your first event.</td>
                   </tr>
                 )}
               </tbody>
@@ -423,4 +476,3 @@ export default function ArtistDashboard() {
     </div>
   );
 }
- 
