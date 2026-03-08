@@ -4,14 +4,14 @@ import { useParams, Link } from 'react-router-dom';
 import axios from '../api/axiosConfig';
 import AudioPlayer from '../components/AudioPlayer';
 import RatingsList from '../components/RatingsList';
-import RatingsForm from '../components/RatingsForm';
+import RatingsForm from '../components/RatingsForm'; 
 import { AuthContext } from '../context/AuthContext';
 import { Badge, Row, Col, Card, Button, Spinner } from 'react-bootstrap';
 
 /**
  * ArtistDetail page with follow/unfollow functionality.
  *
- * Requirements:
+ * Requirements: 
  * - Only logged-in users can follow (redirects to /login when not).
  * - User cannot follow their own artist profile (button disabled).
  * - Optimistic UI updates for immediate feedback; reverts on error.
