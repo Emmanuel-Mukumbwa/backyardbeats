@@ -1,89 +1,242 @@
 
 # Backyard Beats
 
-This project is a music discovery platform for Malawian artists, built with React.
+Backyard Beats is a full-stack music discovery platform (React + Express + MySQL) focused on showcasing local artists. It includes a React frontend, an Express/Sequelize backend, media uploads, user authentication, artist onboarding, event management, playlists and ratings.
 
-## Audio Tracks and Assets
+## Quick summary
 
-All audio tracks are stored in the `public_assets/tracks/` directory. Track file names and paths are referenced directly in the `mockData/artists.json` file. When adding new tracks, ensure the file is placed in `public_assets/tracks/` and update the corresponding artist's `tracks` array in `artists.json` with the exact file name and path, e.g.:
+- Frontend: React (Create React App) — main entry: `src/App.js`
+- Backend: Express + Sequelize + MySQL — main entry: `src/server/index.js`
+- Dev workflow: run the frontend (`npm start`) and backend (`npm run dev`) concurrently
+- Database: MySQL (defaults shown below), Sequelize used for ORM + `mysql2` pool for raw queries
 
-```json
-{
-	"title": "aRelic ft Kaiser Ten - Bho",
-	"previewUrl": "/public_assets/tracks/aRelic ft Kaiser Ten - Bho .mp3",
-	"duration": 120
-}
+## Table of contents
+
+1. Prerequisites
+2. Installation
+3. Environment variables
+4. Running the app (development)
+5. Production / build
+6. Project structure (short)
+7. Important backend routes and API surface
+8. Database and migrations
+9. Troubleshooting
+10. Contributing
+
+---
+
+## 1) Prerequisites
+
+- Node.js (recommended LTS) and npm
+- MySQL server
+- (Optional) `nodemon` is used as a dev dependency; the `npm run dev` script uses it
+
+Windows PowerShell note: the commands below are written for PowerShell where needed.
+
+---
+
+## 2) Installation
+
+From the project root:
+
+```powershell
+npm install
 ```
 
-Track file names must match exactly (including spaces, punctuation, and capitalization) as they appear in the `public_assets/tracks/` folder.
+This installs both frontend and backend dependencies (the repo is a single package.json at the root).
 
-## Getting Started
+### Database
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+Create a MySQL database for development. The project contains a sample SQL file at `src/backyardbeatsDB.sql` you can import to get started.
 
-## Available Scripts
+Example using the mysql CLI (PowerShell):
 
-In the project directory, you can run:
+```powershell
+# Adjust user/password/host as needed
+mysql -u root -p < src\backyardbeatsDB.sql
+```
 
-### `npm start`
+Or open the `.sql` file in your MySQL client and run it.
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
+---
 
-The page will reload when you make changes.\
-You may also see any lint errors in the console.
+## 3) Environment variables
 
-### `npm test`
+The server reads a few common env vars (defaults are provided in code):
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+- `DB_NAME` (default: `backyardbeatsDB`)
+- `DB_USER` (default: `root`)
+- `DB_PASS` (default shown in code, change for production)
+- `DB_HOST` (default: `localhost`)
+- `PORT` (server port; default in `src/server/index.js` is `3001`)
+- `FRONTEND_ORIGIN` (default: `http://localhost:3000` — used by CORS)
+- `JWT_SECRET` (default: `devsecret` in `auth.middleware.js`; set a strong secret for prod)
 
-### `npm run build`
+Check `src/server/db.js` and `src/server/index.js` for defaults and additional options.
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+To set env vars in PowerShell for a run:
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
+```powershell
+$env:DB_USER = 'root'; $env:DB_PASS = 'yourpass'; $env:PORT = '5000'; npm run dev
+```
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+---
 
-### `npm run eject`
+## 4) Running the app (development)
 
-**Note: this is a one-way operation. Once you `eject`, you can't go back!**
+Open two terminals.
 
-If you aren't satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
+Terminal 1 — start the backend (nodemon):
 
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you're on your own.
+```powershell
+npm run dev
+```
 
-You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
+Terminal 2 — start the frontend (Create React App):
 
-## Learn More
+```powershell
+npm start
+```
 
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
+Notes about the dev proxy: the `package.json` in this repo has a `proxy` set to `http://localhost:5000`. The server default port is `3001` (see `src/server/index.js`). To avoid proxy mismatches either:
 
-To learn React, check out the [React documentation](https://reactjs.org/).
+- Start the server on port 5000: ` $env:PORT=5000; npm run dev` (PowerShell) — OR —
+- Update `package.json`'s `proxy` field to `http://localhost:3001` so CRA will forward API requests to the server's actual port.
 
-### Code Splitting
+If you see CORS or network errors, check the proxy and `FRONTEND_ORIGIN` env var.
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
+---
 
-### Analyzing the Bundle Size
+## 5) Production / build
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
+Create a production build of the frontend:
 
-### Making a Progressive Web App
+```powershell
+npm run build
+```
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
+You can serve the `build` folder with any static host, or integrate with the Express server if you choose (not included by default).
 
-### Advanced Configuration
+---
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
+## 6) Project structure (short)
 
-### Deployment
+- `/public` — static public files
+- `/public_assets` — images and tracks used by `mockData`
+- `/src` — frontend source
+	- `src/App.js` — React routes and main layout
+	- `src/components` — presentational and shared components
+	- `src/pages` — route pages (Home, ArtistDetail, ArtistOnboarding, etc.)
+- `/src/server` — backend
+	- `src/server/index.js` — Express bootstrap, route mounting, static uploads
+	- `src/server/db.js` — Sequelize + mysql2 pool and env defaults
+	- `src/server/routes` — route modules (artists, tracks, events, auth, ratings, etc.)
+	- `src/server/controllers` — controllers for business logic
+	- `src/server/middleware` — authentication, upload handling, role checks
+	- `src/server/uploads` — folder where uploaded files are stored (served at `/uploads`)
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
+There are also helper files and a mock server (`mockServer.js`) used for local asset serving during development.
 
-### `npm run build` fails to minify
+---
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+## 7) Important backend routes (mounted in `src/server/index.js`)
+
+- `/artistOnboard` - artist onboarding endpoints (check `src/server/routes/artistOnboard.routes.js`)
+- `/artists` - public and admin artist endpoints
+- `/tracks` - upload and serve tracks
+- `/events` - events CRUD
+- `/users` - user management
+- `/` - ratings routes (note: ratings route file mounts paths like `/artist/:id`)
+- `/districts` - districts data
+- `/auth` - login/register and JWT issuance
+- `/favorites` - favorite artists management
+- `/profile` - user profile endpoints
+- `/fan` and `/fan/playlists` - fan-specific routes and playlist management
+- `/public` - public, non-auth endpoints
+- `/uploads/*` - static file serving for uploaded media
+
+Also included: `/health` — basic health check endpoint.
+
+Authentication: many routes use JWT auth middleware (`src/server/middleware/auth.middleware.js`) — include `Authorization: Bearer <token>` on protected requests.
+
+---
+
+## 8) Database and migrations
+
+- The project uses MySQL with Sequelize. The connection defaults are defined in `src/server/db.js`.
+- A starter SQL dump exists at `src/backyardbeatsDB.sql` (import to create tables/data as provided).
+
+If you add migrations or seeders, keep them in `src/server/migrations` or follow your chosen convention.
+
+---
+
+## 9) Troubleshooting & common gotchas
+
+- Invalid artist id errors (example seen during onboarding):
+	- Confirm where the server expects the artist id: check the controller that returns `"Invalid artist id"` (it may read `req.params.id`, `req.params.artistId`, or `req.body.artistId`).
+	- If uploading `FormData`, do NOT manually set the `Content-Type` header — let the browser/axios set the multipart boundary.
+	- Ensure a valid JWT is sent for protected routes: `Authorization: Bearer <token>`.
+	- Check request URL vs route: some endpoints expect the id in the URL (e.g., `/artists/:id/whatever`) rather than in the body.
+
+- Proxy mismatch: `package.json` proxy is `http://localhost:5000` but the server default port is `3001`. Either start the server with `PORT=5000` or change the proxy to `http://localhost:3001`.
+
+- Database connection failures: check `DB_HOST`, `DB_USER`, `DB_PASS`, and `DB_NAME` env vars. `src/server/db.js` prints a helpful message when it connects or fails.
+
+- File uploads and static serving: uploaded files are served from `/uploads` (see `src/server/index.js`). Verify files are saved to `src/server/uploads` and that the server has read permissions.
+
+Helpful debugging steps:
+
+1. Open browser DevTools Network tab and inspect the failing request (URL, headers, body, response). Confirm the exact payload and where the id is sent.
+2. Check server logs — the server includes a simple request logger that prints `--> METHOD PATH` for incoming requests.
+3. Add console.log on the server controller that validates the id to see what it received.
+
+---
+
+## 10) Contributing
+
+- Follow the existing code style. Frontend uses CRA structure and Bootstrap. Backend is organized by routes/controllers/middleware.
+- Open an issue or PR for any bugfixes or features.
+
+---
+
+## Quick commands
+
+Install:
+
+```powershell
+npm install
+```
+
+Start server (dev - nodemon):
+
+```powershell
+npm run dev
+```
+
+Start frontend (dev):
+
+```powershell
+npm start
+```
+
+Run tests (frontend CRA tests):
+
+```powershell
+npm test
+```
+
+Build production frontend bundle:
+
+```powershell
+npm run build
+```
+
+---
+
+If you'd like, I can also:
+
+1. Add a short `DEVELOPMENT.md` with step-by-step debug tips (routes to inspect, where to add logs).
+2. Fix the proxy/PORT mismatch automatically (choose which port you prefer) and update `package.json` or `src/server/index.js` accordingly.
+
+Happy to update the README further with more examples (API request examples, screenshots, or a short architecture diagram).
+
