@@ -100,7 +100,7 @@ export default function Home() {
       }
     }, 400);
 
-    return () => clearTimeout(debounceRef.current);
+    return () => clearTimeout(debounceRef.current); 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filters]);
 
