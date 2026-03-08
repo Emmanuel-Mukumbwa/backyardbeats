@@ -1,11 +1,26 @@
+// src/pages/FanDashboard.jsx
 import React, { useState, useEffect, useContext } from 'react';
-import { Tabs, Tab, Card, Button, ListGroup, Alert, Modal, Form, Row, Col } from 'react-bootstrap';
+import {
+  Tabs,
+  Tab,
+  Card,
+  Button,
+  ListGroup,
+  Alert,
+  Modal,
+  Form,
+  Row,
+  Col
+} from 'react-bootstrap';
 import axios from '../api/axiosConfig';
 import FavoriteArtists from '../components/FavoriteArtists';
 import MyEvents from '../components/MyEvents';
 import { AuthContext } from '../context/AuthContext';
 import AudioPlayer from '../components/AudioPlayer';
- 
+import RecentlyUploaded from '../components/RecentlyUploaded';
+import MyRatings from '../components/MyRatings';
+import PlaylistsList from '../components/PlaylistsList';
+
 export default function FanDashboard() {
   const { user } = useContext(AuthContext);
   const [favorites, setFavorites] = useState([]);
@@ -19,47 +34,88 @@ export default function FanDashboard() {
   // Modals and forms
   const [showPlaylistModal, setShowPlaylistModal] = useState(false);
   const [playlistForm, setPlaylistForm] = useState({ name: '', description: '' });
-  const [editingPlaylist, setEditingPlaylist] = useState(null);
 
   useEffect(() => {
     loadDashboardData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function loadDashboardData() {
     setLoading(true);
     setError(null);
     try {
-      // Mock data for now - replace with actual API calls
-      setFavorites([
-        { id: 1, displayName: 'Artist One', photoUrl: '/assets/placeholder.png' },
-        { id: 2, displayName: 'Artist Two', photoUrl: '/assets/placeholder.png' }
+      // favorites and other widgets load from separate endpoints (FavoriteArtists handles /favorites)
+      // Fetch recent listens for this fan and other small widgets
+      const [listensRes, eventsRes, ratingsRes] = await Promise.all([
+        axios.get('/fan/listens').catch(() => ({ data: [] })), // recent listens
+        axios.get('/events').catch(() => ({ data: [] })),     // RSVP/events (fallback)
+        axios.get('/ratings/user').catch(() => ({ data: [] })) // optional: implement server-side if absent
       ]);
-      setRecentTracks([
-        { id: 1, title: 'Track One', artist: 'Artist One', previewUrl: '/tracks/sample.mp3' },
-        { id: 2, title: 'Track Two', artist: 'Artist Two', previewUrl: '/tracks/sample2.mp3' }
-      ]);
-      setRsvpEvents([
-        { id: 1, title: 'Event One', event_date: '2023-12-01', district: 'Lilongwe' },
-        { id: 2, title: 'Event Two', event_date: '2023-12-15', district: 'Blantyre' }
-      ]);
-      setRatings([
-        { id: 1, artist: 'Artist One', stars: 5, comment: 'Great track!', createdAt: '2023-11-01' },
-        { id: 2, artist: 'Artist Two', stars: 4, comment: 'Nice!', createdAt: '2023-11-05' }
-      ]);
-      setPlaylists([
-        { id: 1, name: 'My Favorites', description: 'Best tracks', tracks: [] },
-        { id: 2, name: 'Chill Vibes', description: 'Relaxing music', tracks: [] }
-      ]);
+
+      // Map listens to AudioPlayer-friendly tracks array. API returns { listen_id, played_at, track: {...}, artist: {...} }
+      const listens = Array.isArray(listensRes.data) ? listensRes.data : [];
+      const mappedTracks = listens.map(l => ({
+        listen_id: l.listen_id,
+        id: l.track?.id || null,
+        title: l.track?.title || (l.artist?.display_name ? `${l.artist.display_name} — unknown track` : 'Unknown track'),
+        preview_url: l.track?.preview_url || null,
+        duration: l.track?.duration || null,
+        artwork_url: l.track?.artwork_url || null,
+        artist_name: l.artist?.display_name || null,
+        artist_id: l.artist?.id || null,
+        played_at: l.played_at || null,
+        genre: l.track?.genre || null
+      }));
+
+      setRecentTracks(mappedTracks);
+
+      // For other parts of the dashboard keep your existing approach or replace with API calls
+      setRsvpEvents(Array.isArray(eventsRes.data) ? eventsRes.data : []);
+      setRatings(Array.isArray(ratingsRes.data) ? ratingsRes.data : []);
+      setPlaylists([]); // keep empty or fetch /fan/playlists if you implement them
     } catch (err) {
-      setError(err.response?.data?.error || err.message);
+      setError(err.response?.data?.error || err.message || 'Failed to load dashboard');
     } finally {
       setLoading(false);
     }
   }
 
+  // When AudioPlayer starts playing a track, we POST /fan/listens to record it.
+  // AudioPlayer will call this when playback begins.
+  const handleRecordPlay = async (track) => {
+    // track shape is what we passed to AudioPlayer (see mappedTracks)
+    if (!user || !user.id) return; // only record when logged in
+    try {
+      // safe: if track.id is null (no DB track), still send artist if available
+      await axios.post('/fan/listens', {
+        track_id: track.id || null,
+        artist_id: track.artist_id || null
+      });
+
+      // refresh recent tracks to show the latest play at top (lightweight)
+      const res = await axios.get('/fan/listens');
+      const listens = Array.isArray(res.data) ? res.data : [];
+      const mapped = listens.map(l => ({
+        listen_id: l.listen_id,
+        id: l.track?.id || null,
+        title: l.track?.title || (l.artist?.display_name ? `${l.artist.display_name} — unknown track` : 'Unknown track'),
+        preview_url: l.track?.preview_url || null,
+        duration: l.track?.duration || null,
+        artwork_url: l.track?.artwork_url || null,
+        artist_name: l.artist?.display_name || null,
+        artist_id: l.artist?.id || null,
+        played_at: l.played_at || null,
+        genre: l.track?.genre || null
+      }));
+      setRecentTracks(mapped);
+    } catch (err) {
+      // non-fatal: record failure is not blocking playback
+      console.warn('Could not record listen', err);
+    }
+  };
+
   const handlePlaylistSubmit = async (e) => {
     e.preventDefault();
-    // Mock playlist creation
     const newPlaylist = {
       id: Date.now(),
       name: playlistForm.name,
@@ -83,21 +139,69 @@ export default function FanDashboard() {
     <div>
       <h2 className="mb-4">Fan Dashboard</h2>
       <Tabs defaultActiveKey="favorites" id="fan-dashboard-tabs">
-       <Tab eventKey="favorites" title="Favorite Artists">
+        <Tab eventKey="favorites" title="Favorite Artists">
           <div className="mt-3">
             <h5>My Favorite Artists</h5>
             <FavoriteArtists max={12} />
           </div>
-       </Tab>
+        </Tab>
 
         <Tab eventKey="recent" title="Recently Played">
           <div className="mt-3">
             <h5>Recently Played Tracks</h5>
             {recentTracks.length > 0 ? (
-              <AudioPlayer tracks={recentTracks} />
+              <>
+                <AudioPlayer tracks={recentTracks} onPlay={handleRecordPlay} />
+                {/* small history list below player */}
+                <ListGroup className="mt-3">
+                  {recentTracks.slice(0, 12).map((t, i) => (
+                    <ListGroup.Item key={`${t.listen_id || t.id}-${i}`}>
+                      <div className="d-flex justify-content-between align-items-center">
+                        <div>
+                          <strong>{t.title}</strong>
+                          <div className="small text-muted">
+                            {t.artist_name ? t.artist_name : ''} {t.played_at ? `• ${new Date(t.played_at).toLocaleString()}` : ''}
+                          </div>
+                        </div>
+                        <div className="small text-muted">{t.duration ? `${t.duration}s` : '-'}</div>
+                      </div>
+                    </ListGroup.Item>
+                  ))}
+                </ListGroup>
+              </>
             ) : (
               <p>No recently played tracks.</p>
             )}
+          </div>
+        </Tab>
+
+        <Tab eventKey="new" title="New Releases">
+          <div className="mt-3">
+            <RecentlyUploaded limit={16} onRecordPlay={async (track) => {
+              // When a fan plays a recent upload, record it (we already have handleRecordPlay; reuse it)
+              if (!user || !user.id) return;
+              try {
+                await axios.post('/fan/listens', { track_id: track.id, artist_id: track.artist_id || null });
+                // refresh recently played list
+                const res = await axios.get('/fan/listens');
+                const listens = Array.isArray(res.data) ? res.data : [];
+                const mapped = listens.map(l => ({
+                  listen_id: l.listen_id,
+                  id: l.track?.id || null,
+                  title: l.track?.title || (l.artist?.display_name ? `${l.artist.display_name} — unknown track` : 'Unknown track'),
+                  preview_url: l.track?.preview_url || null,
+                  duration: l.track?.duration || null,
+                  artwork_url: l.track?.artwork_url || null,
+                  artist_name: l.artist?.display_name || null,
+                  artist_id: l.artist?.id || null,
+                  played_at: l.played_at || null,
+                  genre: l.track?.genre || null
+                }));
+                setRecentTracks(mapped);
+              } catch (e) {
+                console.warn('record play failed', e);
+              }
+            }} />
           </div>
         </Tab>
 
@@ -111,43 +215,13 @@ export default function FanDashboard() {
         <Tab eventKey="ratings" title="My Ratings">
           <div className="mt-3">
             <h5>My Rating History</h5>
-            <ListGroup>
-              {ratings.map(rating => (
-                <ListGroup.Item key={rating.id}>
-                  <div className="d-flex justify-content-between">
-                    <div>
-                      <strong>{rating.artist}</strong>
-                      <div>{'★'.repeat(rating.stars)} ({rating.stars}/5)</div>
-                      <div className="small text-muted">{rating.comment}</div>
-                    </div>
-                    <div className="small text-muted">{new Date(rating.createdAt).toLocaleDateString()}</div>
-                  </div>
-                </ListGroup.Item>
-              ))}
-            </ListGroup>
+            <MyRatings />
           </div>
         </Tab>
 
         <Tab eventKey="playlists" title="Playlists">
           <div className="mt-3">
-            <Button onClick={() => setShowPlaylistModal(true)}>Create Playlist</Button>
-            <Row className="mt-3">
-              {playlists.map(playlist => (
-                <Col md={6} key={playlist.id} className="mb-3">
-                  <Card>
-                    <Card.Body>
-                      <Card.Title>{playlist.name}</Card.Title>
-                      <Card.Text>{playlist.description}</Card.Text>
-                      <div className="d-flex gap-2">
-                        <Button variant="primary" size="sm">View Tracks</Button>
-                        <Button variant="outline-secondary" size="sm">Edit</Button>
-                        <Button variant="outline-danger" size="sm" onClick={() => deletePlaylist(playlist.id)}>Delete</Button>
-                      </div>
-                    </Card.Body>
-                  </Card>
-                </Col>
-              ))}
-            </Row>
+            <PlaylistsList />
           </div>
         </Tab>
       </Tabs>
@@ -177,4 +251,3 @@ export default function FanDashboard() {
     </div>
   );
 }
- 
