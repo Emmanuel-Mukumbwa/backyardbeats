@@ -10,7 +10,7 @@ router.use(auth); // all endpoints require auth
 // GET /favorites        -> list favorites for the logged-in user
 router.get('/', controller.getUserFavorites);
 
-// POST /favorites       -> body: { artist_id }
+// POST /favorites       -> body: { artist_id } 
 router.post('/', controller.addFavorite);
 
 // DELETE /favorites/:artistId -> unfollow
