@@ -186,7 +186,7 @@ module.exports = {
   // exported paths
   UPLOAD_BASE,
   TRACKS_DIR,
-  TRACKS_ARTWORK_DIR,
+  TRACKS_ARTWORK_DIR, 
   ARTIST_PHOTOS_DIR,
   EVENTS_IMAGES_DIR,
   OTHERS_DIR
