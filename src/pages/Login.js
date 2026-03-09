@@ -32,7 +32,7 @@ export default function Login() {
       
       console.log('✓ Login response received:', {
         user: res.data.user,
-        hasToken: !!res.data.token
+        hasToken: !!res.data.token 
       });
       
       // Validate response
