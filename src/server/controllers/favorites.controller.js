@@ -1,4 +1,4 @@
-//src/server/controllers/favorites.controller.js
+// src/server/controllers/favorites.controller.js
 const pool = require('../db').pool;
 
 /**
@@ -18,21 +18,51 @@ exports.getUserFavorites = async (req, res, next) => {
     const userId = req.user && req.user.id;
     if (!userId) return res.status(401).json({ error: 'Authentication required' });
 
+    // Return artist metadata useful for the fan dashboard:
+    // - track_count (subquery from tracks)
+    // - district name (left join districts)
+    // - avg_rating, follower_count, has_upcoming_event from artists table
+    // - followed_at (when the fan followed the artist)
     const sql = `
-      SELECT a.id, a.display_name, a.photo_url, a.user_id, a.avg_rating, a.has_upcoming_event, f.created_at AS followed_at
+      SELECT
+        a.id,
+        a.display_name,
+        a.photo_url,
+        a.user_id,
+        a.avg_rating,
+        a.follower_count,
+        a.has_upcoming_event,
+        d.name AS district,
+        (SELECT COUNT(*) FROM tracks t WHERE t.artist_id = a.id) AS track_count,
+        f.created_at AS followed_at
       FROM favorites f
       JOIN artists a ON f.artist_id = a.id
+      LEFT JOIN districts d ON a.district_id = d.id
       WHERE f.user_id = ?
       ORDER BY f.created_at DESC
       LIMIT 200
     `;
+
     const [rows] = await pool.query(sql, [userId]);
-    return res.json(rows || []);
+
+    const result = (rows || []).map(r => ({
+      id: r.id,
+      display_name: r.display_name,
+      photo_url: r.photo_url, // stored path e.g. /uploads/artists/photos/img-9-... or uploads/...
+      user_id: r.user_id,
+      avg_rating: r.avg_rating !== null ? Number(r.avg_rating) : null,
+      follower_count: r.follower_count !== null ? Number(r.follower_count) : 0,
+      has_upcoming_event: !!r.has_upcoming_event,
+      district: r.district || null,
+      track_count: r.track_count !== null ? Number(r.track_count) : 0,
+      followed_at: r.followed_at ? new Date(r.followed_at).toISOString() : null
+    }));
+
+    return res.json(result);
   } catch (err) {
     next(err);
   }
 };
-
 
 exports.addFavorite = async (req, res, next) => {
   try {
