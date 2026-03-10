@@ -44,7 +44,7 @@ export default function App() {
                   <ArtistDashboard />
                 </RequireRole>
               </RequireAuth>
-            } />
+            } /> 
             <Route path="/fan/dashboard" element={
               <RequireAuth>
                 <RequireRole roles={["fan"]}>
