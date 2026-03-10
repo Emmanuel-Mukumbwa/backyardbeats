@@ -27,17 +27,30 @@ function makeAbsoluteUrl(relOrAbs, req) {
 /**
  * GET /admin/pending/events
  * Pending events: is_approved = 0 AND is_rejected = 0
+ *
+ * Returns event rows with:
+ * - district name (from districts)
+ * - artist display name, and artist user summary (username, deleted/banned)
+ * - absolute image_url (built with request host)
  */
 exports.pendingEvents = async (req, res, next) => {
   try {
     const [rows] = await pool.query(
-      `SELECT e.id, e.title, e.description, e.event_date, e.artist_id, a.display_name AS artist,
-              e.district_id, d.name AS district, e.venue, e.address, e.ticket_url, e.image_url,
+      `SELECT e.id, e.title, e.description, e.event_date, e.artist_id,
+              a.display_name AS artist_display_name,
+              a.photo_url AS artist_photo,
+              u.id AS artist_user_id,
+              u.username AS artist_username,
+              u.deleted_at AS artist_user_deleted_at,
+              u.banned AS artist_user_banned,
+              e.district_id, d.name AS district_name,
+              e.venue, e.address, e.ticket_url, e.image_url,
               e.lat, e.lng, e.capacity,
               COALESCE(e.is_approved,0) AS is_approved, COALESCE(e.is_rejected,0) AS is_rejected,
               e.approved_at, e.rejected_at, e.rejection_reason, e.created_at
        FROM events e
        LEFT JOIN artists a ON e.artist_id = a.id
+       LEFT JOIN users u ON a.user_id = u.id
        LEFT JOIN districts d ON e.district_id = d.id
        WHERE COALESCE(e.is_approved,0) = 0 AND COALESCE(e.is_rejected,0) = 0
        ORDER BY e.created_at DESC
@@ -52,12 +65,22 @@ exports.pendingEvents = async (req, res, next) => {
         description: r.description,
         event_date: r.event_date,
         artist_id: r.artist_id,
-        artist: r.artist,
+        artist: {
+          display_name: r.artist_display_name,
+          photo: buildPublicUrl(r.artist_photo, 'artist'),
+          user: {
+            id: r.artist_user_id,
+            username: r.artist_username,
+            deleted_at: r.artist_user_deleted_at,
+            banned: !!r.artist_user_banned
+          }
+        },
         district_id: r.district_id,
-        district: r.district,
+        district: r.district_name || null,
         venue: r.venue,
         address: r.address,
         ticket_url: r.ticket_url,
+        // absolute URL for admin UI preview (uses req)
         image_url: makeAbsoluteUrl(rawImage, req),
         lat: r.lat,
         lng: r.lng,
@@ -100,13 +123,30 @@ exports.approveEvent = async (req, res, next) => {
       [approvedBy, id]
     );
 
-    const [rows] = await pool.query('SELECT id, title, event_date, image_url FROM events WHERE id = ? LIMIT 1', [id]);
+    const [rows] = await pool.query(
+      `SELECT e.id, e.title, e.event_date, e.image_url,
+              a.display_name AS artist_display_name,
+              u.id AS artist_user_id, u.username AS artist_username
+       FROM events e
+       LEFT JOIN artists a ON e.artist_id = a.id
+       LEFT JOIN users u ON a.user_id = u.id
+       WHERE e.id = ? LIMIT 1`,
+      [id]
+    );
+
     const rawImage = rows[0] ? buildPublicUrl(rows[0].image_url, 'eventImage') : null;
     const ev = rows[0] ? {
       id: rows[0].id,
       title: rows[0].title,
       event_date: rows[0].event_date,
-      image_url: makeAbsoluteUrl(rawImage, req)
+      image_url: makeAbsoluteUrl(rawImage, req),
+      artist: {
+        display_name: rows[0].artist_display_name,
+        user: {
+          id: rows[0].artist_user_id,
+          username: rows[0].artist_username
+        }
+      }
     } : null;
 
     res.json({ success: true, event: ev });

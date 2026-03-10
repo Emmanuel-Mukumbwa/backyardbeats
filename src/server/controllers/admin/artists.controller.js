@@ -35,32 +35,39 @@ function buildPublicUrl(value, type = 'generic') {
  * Returns artists that need approval:
  *  is_approved = 0 AND is_rejected = 0 => pending
  *
- * NOTE: your artists table doesn't have created_at in your current schema,
- * so we avoid selecting it to prevent Unknown column errors.
+ * NOTE: some schemas (yours) store district on users table, so we join users -> districts.
  */
 exports.pendingArtists = async (req, res, next) => {
   try {
+    // join users and districts so we can return district_name from users.district_id
     const [rows] = await pool.query(
-      `SELECT id,
-              display_name AS displayName,
-              bio,
-              photo_url AS photoUrl,
-              lat, lng,
-              district_id,
-              avg_rating,
-              follower_count,
-              user_id,
-              is_approved, is_rejected,
-              approved_at, rejected_at,
-              approved_by, rejected_by,
-              rejection_reason
-       FROM artists
-       WHERE is_approved = 0 AND is_rejected = 0
-       ORDER BY id DESC
+      `SELECT
+         a.id,
+         a.display_name AS displayName,
+         a.bio,
+         a.photo_url AS photoUrl,
+         a.lat, a.lng,
+         u.id AS user_id,
+         u.username AS username,
+         u.deleted_at AS user_deleted_at,
+         u.banned AS user_banned,
+         u.district_id AS district_id,
+         d.name AS district_name,
+         a.avg_rating,
+         a.follower_count,
+         a.is_approved, a.is_rejected,
+         a.approved_at, a.rejected_at,
+         a.approved_by, a.rejected_by,
+         a.rejection_reason
+       FROM artists a
+       LEFT JOIN users u ON a.user_id = u.id
+       LEFT JOIN districts d ON u.district_id = d.id
+       WHERE a.is_approved = 0 AND a.is_rejected = 0
+       ORDER BY a.id DESC
        LIMIT 500`
     );
 
-    // normalize photoUrl -> public path
+    // normalize photoUrl -> public path and return a compact user object
     const mapped = rows.map(r => ({
       id: r.id,
       displayName: r.displayName,
@@ -68,10 +75,17 @@ exports.pendingArtists = async (req, res, next) => {
       photoUrl: buildPublicUrl(r.photoUrl, 'artist'),
       lat: r.lat,
       lng: r.lng,
+      // district comes from users.district_id -> districts.name
       district_id: r.district_id,
+      district_name: r.district_name || null,
       avg_rating: r.avg_rating,
       follower_count: r.follower_count,
-      user_id: r.user_id,
+      user: {
+        id: r.user_id,
+        username: r.username,
+        deleted_at: r.user_deleted_at,
+        banned: !!r.user_banned
+      },
       is_approved: !!r.is_approved,
       is_rejected: !!r.is_rejected,
       approved_at: r.approved_at,
@@ -110,11 +124,32 @@ exports.approveArtist = async (req, res, next) => {
       [approvedBy, id]
     );
 
-    const [rows] = await pool.query('SELECT id, display_name AS displayName, photo_url AS photoUrl FROM artists WHERE id = ? LIMIT 1', [id]);
+    const [rows] = await pool.query(
+      `SELECT a.id,
+              a.display_name AS displayName,
+              a.photo_url AS photoUrl,
+              u.id AS user_id,
+              u.username AS username,
+              u.district_id AS district_id,
+              d.name AS district_name
+       FROM artists a
+       LEFT JOIN users u ON a.user_id = u.id
+       LEFT JOIN districts d ON u.district_id = d.id
+       WHERE a.id = ?
+       LIMIT 1`,
+      [id]
+    );
+
     const artist = rows[0] ? {
       id: rows[0].id,
       displayName: rows[0].displayName,
-      photoUrl: buildPublicUrl(rows[0].photoUrl, 'artist')
+      photoUrl: buildPublicUrl(rows[0].photoUrl, 'artist'),
+      user: {
+        id: rows[0].user_id,
+        username: rows[0].username
+      },
+      district_id: rows[0].district_id,
+      district_name: rows[0].district_name || null
     } : null;
 
     res.json({ success: true, artist });
