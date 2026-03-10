@@ -1,3 +1,4 @@
+//src/components/Hero.js
 import React from 'react';
 import { Row, Col, Button } from 'react-bootstrap';
 import { Link } from 'react-router-dom';
@@ -22,9 +23,9 @@ export default function Hero() {
         {/* Text column */}
         <Col xs={12} md={6} className="p-4">
           <div className="hero-content">
-            <h1 id="hero-heading" className="hero-title mb-2">BackyardBeats — Discover music from your neighborhood</h1>
+            <h1 id="hero-heading" className="hero-title mb-2">BackyardBeats — Malawi’s home for local music</h1>
             <p className="lead hero-subtext mb-3">
-              Find, support and book talented artists from your district. Listen, follow, and show love to local creators — right in your backyard.
+              Discover songs, events and artists from across Malawi — listen, follow and book local talent. Support creators in your district and help homegrown music reach new ears.
             </p>
 
             <div className="d-flex gap-2">
@@ -32,12 +33,10 @@ export default function Hero() {
               <Button as={Link} to="/events" variant="outline-secondary">Browse Events</Button>
             </div>
 
-            <div className="mt-3 text-muted small">
-              Tip: Use the map to discover artists near you or filter by district and genre.
-            </div>
           </div>
         </Col>
       </Row>
     </section>
   );
 }
+ 
