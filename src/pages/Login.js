@@ -1,124 +1,195 @@
-// ============================================
-// FILE 2: src/pages/Login.js
-// ENHANCED - Better storage and error handling
-// ============================================
-
-import React, { useState, useContext } from 'react';
+// File: src/pages/Login.jsx
+import React, { useState, useContext, useEffect } from 'react';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
-import { Form, Button, Card } from 'react-bootstrap';
+import { Form, Button, Card, InputGroup, Spinner } from 'react-bootstrap';
 import axios from '../api/axiosConfig';
 import { AuthContext } from '../context/AuthContext';
 import ToastMessage from '../components/ToastMessage';
 
 export default function Login() {
-  const [email, setEmail] = useState('');
+  const [identifier, setIdentifier] = useState(''); // accepts email or username
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [rememberMe, setRememberMe] = useState(true);
+
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
-  const [loading, setLoading] = useState(false);
+
+  // field-specific validation state (used to highlight fields on server errors)
+  const [fieldErrors, setFieldErrors] = useState({ identifier: false, password: false });
+
   const navigate = useNavigate();
   const location = useLocation();
   const { login } = useContext(AuthContext);
 
-  const submit = async (e) => {
-    e.preventDefault();
-    setLoading(true);
-    setError(null);
-    
-    console.log('🔐 Attempting login for:', email);
-    
+  // Basic client-side validation
+  const identifierTrim = identifier.trim();
+  const isEmail = identifierTrim.includes('@');
+  const emailValid = isEmail ? /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(identifierTrim) : true;
+  const identifierValid = identifierTrim.length >= 3;
+  const passwordValid = password.length >= 8;
+
+  const formValid = identifierValid && emailValid && passwordValid;
+
+  // Autofill email from query param (optional)
+  useEffect(() => {
+    const pre = new URLSearchParams(location.search).get('email');
+    if (pre && pre.includes('@')) setIdentifier(pre);
+  }, [location.search]);
+
+  // Clear field-level errors as user types (functional updater prevents missing-deps ESLint)
+  useEffect(() => {
+    if (identifierTrim.length > 0) {
+      setFieldErrors(prev => (prev.identifier ? { ...prev, identifier: false } : prev));
+    }
+  }, [identifierTrim, setFieldErrors]);
+
+  useEffect(() => {
+    if (password.length > 0) {
+      setFieldErrors(prev => (prev.password ? { ...prev, password: false } : prev));
+    }
+  }, [password, setFieldErrors]);
+
+  const persistAuth = ({ token, user }) => {
     try {
-      const res = await axios.post('/auth/login', { email, password });
-      
-      console.log('✓ Login response received:', {
-        user: res.data.user,
-        hasToken: !!res.data.token 
-      });
-      
-      // Validate response
-      if (!res.data.token) {
-        throw new Error('No token received from server');
-      }
-
-      if (!res.data.user || !res.data.user.id) {
-        throw new Error('Invalid user data received from server');
-      }
-
-      // Save user in AuthContext
-      login({ ...res.data.user, token: res.data.token });
-
-      // Persist to localStorage in MULTIPLE formats for reliability
-      try {
-        const token = res.data.token;
-        const user = res.data.user;
-
-        // Primary storage: simple token
+      const payload = { token, user };
+      if (rememberMe) {
         localStorage.setItem('bb_token', token);
-        console.log('✓ Saved bb_token');
+        localStorage.setItem('bb_user', JSON.stringify(user));
+        localStorage.setItem('bb_auth', JSON.stringify(payload));
+      } else {
+        sessionStorage.setItem('bb_token', token);
+        sessionStorage.setItem('bb_user', JSON.stringify(user));
+        sessionStorage.setItem('bb_auth', JSON.stringify(payload));
+      }
+    } catch (e) {
+      // non-fatal
+      console.error('Error persisting auth to storage', e);
+    }
+  };
 
-        // Secondary storage: user object with token
-        localStorage.setItem('bb_user', JSON.stringify({ ...user, token }));
-        console.log('✓ Saved bb_user');
+  /**
+   * handleSubmit
+   * - Uses fetch() to avoid axios interceptors that might redirect on 401.
+   * - Persists token before calling AuthContext.login so other parts reading localStorage see token immediately.
+   * - Awaits AuthContext.login if it returns a promise to avoid races with RequireAuth/axios checks.
+   * - Shows a short UX delay so the success toast and spinner are perceived before navigation.
+   */
+  const handleSubmit = async (e) => {
+    e?.preventDefault();
+    e?.stopPropagation();
 
-        // Tertiary storage: structured auth object
-        localStorage.setItem('bb_auth', JSON.stringify({ token, user }));
-        console.log('✓ Saved bb_auth');
+    setError(null);
+    setSuccess(null);
+    setFieldErrors({ identifier: false, password: false });
 
-        // Verify storage worked
-        const verifyToken = localStorage.getItem('bb_token');
-        if (!verifyToken) {
-          console.error('❌ Token was not saved');
+    if (!formValid) {
+      setFieldErrors({
+        identifier: !identifierValid || !emailValid,
+        password: !passwordValid,
+      });
+      setError('Please fix the highlighted fields before signing in.');
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const body = { identifier: identifierTrim, password };
+
+      // Build URL using axios's configured baseURL if present, otherwise relative path
+      const base = axios?.defaults?.baseURL || '';
+      const url = `${base.replace(/\/$/, '')}/auth/login`;
+
+      // Use fetch() to avoid axios interceptors redirecting mid-flow
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+        credentials: 'include'
+      });
+
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        if (res.status === 401) {
+          setFieldErrors({ identifier: true, password: true });
+          setError(data?.error || 'Incorrect email/username or password. Use "Forgot password?" if needed.');
+        } else if (res.status === 410) {
+          setError(data?.error || 'This account has been deleted. Contact support if this is an error.');
+        } else if (res.status === 403) {
+          setError(data?.error || 'Account access denied. Contact support for help.');
+        } else {
+          setError(data?.error || data?.message || 'Login failed — please try again.');
         }
-      } catch (e) {
-        console.error('❌ Error saving to localStorage:', e);
-      } 
+        setLoading(false);
+        return;
+      }
 
-      setSuccess('Login successful! Redirecting...');
-      
+      // Successful login
+      const token = data?.token;
+      const user = data?.user;
+
+      if (!token || !user || !user.id) {
+        setError('Authentication failed: invalid server response.');
+        setLoading(false);
+        return;
+      }
+
+      // Server account flags
+      if (user.deleted_at) {
+        setError('This account has been deleted. Contact support if you believe this is an error.');
+        setLoading(false);
+        return;
+      }
+      if (user.banned) {
+        setError('This account has been banned. Contact support for assistance.');
+        setLoading(false);
+        return;
+      }
+
+      // Persist to storage first
+      persistAuth({ token, user });
+
+      // Call AuthContext.login (may set app-level state). Await it if it returns a Promise.
+      try {
+        const maybePromise = login ? login({ ...user, token }) : null;
+        if (maybePromise && typeof maybePromise.then === 'function') {
+          await maybePromise;
+        }
+      } catch (ctxErr) {
+        // Non-fatal; we persisted token so protected checks that look at localStorage will see it
+        console.warn('AuthContext.login threw (non-fatal):', ctxErr);
+      }
+
+      // Show success toast and keep spinner visible briefly for a professional UX
+      setSuccess('Login successful — redirecting...');
+      const NAV_DELAY_MS = 600;
+
+      // Determine safe redirectTo (only allow internal paths that start with '/')
+      const rawRedirect = new URLSearchParams(location.search).get('redirectTo');
+      const safeRedirect = (rawRedirect && rawRedirect.startsWith('/')) ? rawRedirect : null;
+
       setTimeout(() => {
-        // Role-based redirect
-        const redirectTo = new URLSearchParams(location.search).get('redirectTo');
-        
-        if (redirectTo) {
-          console.log('→ Redirecting to:', redirectTo);
-          navigate(redirectTo, { replace: true });
+        if (safeRedirect) {
+          navigate(safeRedirect, { replace: true });
           return;
         }
-        
-        if (res.data.user.role === 'artist') {
-          // Check profile status
-          const hasProfile = res.data.user.has_profile || false;
 
-          if (!hasProfile) {
-            console.log('→ Artist without profile, redirecting to onboarding');
-            navigate('/onboard', { replace: true });
-          } else {
-            console.log('→ Artist with profile, redirecting to dashboard');
-            navigate('/artist/dashboard', { replace: true });
-          }
-        } else if (res.data.user.role === 'admin') {
-          console.log('→ Admin user, redirecting to admin panel');
+        // Role-based redirects
+        if (user.role === 'artist') {
+          const hasProfile = !!user.has_profile;
+          navigate(hasProfile ? '/artist/dashboard' : '/onboard', { replace: true });
+        } else if (user.role === 'admin') {
           navigate('/admin', { replace: true });
         } else {
-          console.log('→ Fan user, redirecting to home');
-          navigate('/', { replace: true });
+          navigate('/fan/dashboard', { replace: true });
         }
-      }, 1200);
-      
+      }, NAV_DELAY_MS);
     } catch (err) {
-      console.error('❌ Login error:', err);
-      console.error('Error details:', {
-        message: err.message,
-        response: err.response?.data,
-        status: err.response?.status
-      });
-      
-      const errorMessage = err.response?.data?.error 
-        || err.response?.data?.message 
-        || err.message 
-        || 'Login failed. Please try again.';
-      
-      setError(errorMessage);
+      console.error('Login error (network/unknown):', err);
+      setError(err?.message || 'Login failed — network error. Try again.');
     } finally {
       setLoading(false);
     }
@@ -126,68 +197,87 @@ export default function Login() {
 
   return (
     <>
-      <ToastMessage 
-        show={!!error} 
-        onClose={() => setError(null)} 
-        message={error} 
-        variant="danger" 
-      />
-      <ToastMessage  
-        show={!!success} 
-        onClose={() => setSuccess(null)} 
-        message={success} 
-        variant="success" 
-      />
-      
-      <Card className="mx-auto" style={{ maxWidth: 480 }}>
+      <ToastMessage show={!!error} onClose={() => setError(null)} message={error} variant="danger" />
+      <ToastMessage show={!!success} onClose={() => setSuccess(null)} message={success} variant="success" />
+
+      <Card className="mx-auto mt-4" style={{ maxWidth: 520 }}>
         <Card.Body>
-          <h3 className="mb-3">Login</h3>
-          <Form onSubmit={submit}>
+          <h3 className="mb-3">Sign in</h3>
+
+          <Form onSubmit={handleSubmit} noValidate>
             <Form.Group className="mb-2">
-              <Form.Label>Email</Form.Label>
-              <Form.Control 
-                type="email" 
-                value={email} 
-                onChange={e => setEmail(e.target.value)} 
-                placeholder="Enter your email" 
-                required 
-                autoComplete="email"
+              <Form.Label>Email or username</Form.Label>
+              <Form.Control
+                type="text"
+                value={identifier}
+                onChange={(e) => setIdentifier(e.target.value)}
+                placeholder="you@example.com or username"
+                required
+                isInvalid={(identifier.length > 0 && !identifierValid) || fieldErrors.identifier}
+                autoComplete="username"
               />
+              <Form.Control.Feedback type="invalid">
+                {fieldErrors.identifier ? 'Check your email/username.' : 'Enter a valid email or username (min 3 characters).'}
+              </Form.Control.Feedback>
             </Form.Group>
-            
-            <Form.Group className="mb-3">
+
+            <Form.Group className="mb-2">
               <Form.Label>Password</Form.Label>
-              <Form.Control 
-                type="password" 
-                value={password} 
-                onChange={e => setPassword(e.target.value)} 
-                placeholder="Enter your password"
-                required 
-                autoComplete="current-password"
-              />
+              <InputGroup>
+                <Form.Control
+                  type={showPassword ? 'text' : 'password'}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Your password"
+                  required
+                  isInvalid={(password.length > 0 && !passwordValid) || fieldErrors.password}
+                  autoComplete="current-password"
+                />
+                <Button
+                  type="button"
+                  variant="outline-secondary"
+                  onClick={() => setShowPassword((s) => !s)}
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                >
+                  {showPassword ? 'Hide' : 'Show'}
+                </Button>
+                <Form.Control.Feedback type="invalid">
+                  {fieldErrors.password ? 'Password may be incorrect. Use "Forgot password?" to reset.' : 'Password must be at least 8 characters.'}
+                </Form.Control.Feedback>
+              </InputGroup>
             </Form.Group>
-            
+
+            <div className="d-flex justify-content-between align-items-center mb-3">
+              <Form.Check
+                id="rememberMe"
+                label="Remember me"
+                checked={rememberMe}
+                onChange={() => setRememberMe((s) => !s)}
+              />
+              <Link to="/forgot-password" className="small">Forgot password?</Link>
+            </div>
+
             <div className="d-grid">
-              <Button 
-                type="submit" 
-                variant="success" 
-                disabled={loading}
-              >
-                {loading ? 'Signing in...' : 'Sign in'}
+              <Button type="submit" variant="success" disabled={loading}>
+                {loading ? (
+                  <>
+                    <Spinner as="span" animation="border" size="sm" role="status" aria-hidden="true" />{' '}
+                    Signing in...
+                  </>
+                ) : 'Sign in'}
               </Button>
             </div>
           </Form>
-          
+
           <div className="mt-3 small">
-            No account? <Link to="/register">Register</Link>
+            Don't have an account? <Link to="/register">Create account</Link>
           </div>
-          
+
           <div className="mt-2 text-muted small">
-            Forgot your password? Contact support or try registering with a different email.
+            Need help? Contact <a href="mailto:support@backyardbeats.local">support</a>.
           </div>
         </Card.Body>
       </Card>
     </>
   );
 }
- 
