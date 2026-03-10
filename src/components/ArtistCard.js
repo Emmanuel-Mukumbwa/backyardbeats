@@ -1,6 +1,7 @@
+//src/components/ArtistCard.js
 import React, { useState, useEffect } from 'react';
 import { Card, Button } from 'react-bootstrap';
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router-dom'; 
 import axios from '../api/axiosConfig';
 import { FaStar } from 'react-icons/fa';
 
@@ -14,7 +15,7 @@ export default function ArtistCard({ artist, selected }) {
   const bio = artist.bio || artist.description || '';
 
   // resolve backend base for relative asset paths
-  const backendBase = (() => {
+  const backendBase = (() => { 
     try {
       return (axios && axios.defaults && axios.defaults.baseURL) || process.env.REACT_APP_API_URL || '';
     } catch {
