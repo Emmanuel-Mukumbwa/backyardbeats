@@ -94,13 +94,14 @@ export default function PendingApprovals({ items = [], type = 'item', onDone, re
   function renderPreview(it) {
     if (type === 'track') {
       const artworkUrl = it.preview_artwork ? resolveToBackend(it.preview_artwork) : null;
-      const audioUrl = it.previewUrl ? resolveToBackend(it.previewUrl) : null;
+      // track previewUrl may be stored in different fields
+      const audioUrl = (it.previewUrl || it.preview_url || it.file_url) ? resolveToBackend(it.previewUrl || it.preview_url || it.file_url) : null;
       return (
         <div className="d-flex align-items-center mb-2">
           {artworkUrl && <Image src={artworkUrl} rounded width={80} height={80} className="me-3" />}
           {audioUrl ? <audio controls src={audioUrl} className="me-3" /> : null}
           <div>
-            <div><strong>{it.artist || it.artist_name || ''}</strong></div>
+            <div><strong>{it.artist || it.artist_name || it.artist_display_name || ''}</strong></div>
             <div className="text-muted small">{it.genre || it.release_date || ''}</div>
           </div>
         </div>
@@ -113,7 +114,7 @@ export default function PendingApprovals({ items = [], type = 'item', onDone, re
         <div className="d-flex align-items-center mb-2">
           {photo ? <Image src={photo} roundedCircle width={64} height={64} className="me-3" /> : null}
           <div>
-            <div><strong>{it.displayName || it.name || ''}</strong></div>
+            <div><strong>{it.displayName || it.name || it.display_name || ''}</strong></div>
             <div className="text-muted small">{it.district_name || it.district || ''}</div>
           </div>
         </div>
@@ -122,12 +123,23 @@ export default function PendingApprovals({ items = [], type = 'item', onDone, re
 
     if (type === 'event') {
       const img = it.image_url ? resolveToBackend(it.image_url) : null;
+
+      // artist may be a string (old shape) or an object (new richer shape)
+      let artistName = '';
+      if (!it) artistName = '';
+      else if (typeof it.artist === 'string') artistName = it.artist;
+      else if (it.artist && typeof it.artist === 'object') {
+        artistName = it.artist.display_name || it.artist.displayName || it.artist.name || (it.artist.user && it.artist.user.username) || '';
+      } else {
+        artistName = it.artist_name || it.artist_display_name || '';
+      }
+
       return (
         <div className="d-flex align-items-start mb-2">
           {img ? <Image src={img} rounded width={120} height={80} className="me-3" /> : null}
           <div>
             <div><strong>{it.title}</strong></div>
-            <div className="text-muted small">{it.artist || it.artist_name || ''} — {it.district || it.district_name || ''}</div>
+            <div className="text-muted small">{artistName} — {it.district || it.district_name || ''}</div>
             <div className="text-muted small">{it.event_date ? new Date(it.event_date).toLocaleString() : ''}</div>
           </div>
         </div>
