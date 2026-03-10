@@ -1,3 +1,4 @@
+// File: src/components/ToastMessage.js
 import React from 'react';
 import { Toast, ToastContainer } from 'react-bootstrap';
 import PropTypes from 'prop-types';
@@ -6,23 +7,35 @@ import PropTypes from 'prop-types';
  * ToastMessage - lightweight toast wrapper
  * usage: <ToastMessage show={show} onClose={...} message="..." variant="success" />
  */
-export default function ToastMessage({ show, onClose, message, variant = 'success', delay = 3000, position = 'top-end' }) {
-  // map variant to bg
+export default function ToastMessage({
+  show,
+  onClose,
+  message,
+  variant = 'success',
+  delay = 4000,
+  position = 'top-end',
+  title,
+}) {
   const bg = variant === 'danger' ? 'danger' : (variant === 'warning' ? 'warning' : 'success');
 
-  // translate position to container props
   const posMap = {
-    'top-end': { position: 'fixed', top: 12, right: 12, zIndex: 1080 },
-    'bottom-end': { position: 'fixed', bottom: 12, right: 12, zIndex: 1080 },
+    'top-end': { top: 12, right: 12 },
+    'bottom-end': { bottom: 12, right: 12 },
+    'top-start': { top: 12, left: 12 },
+    'bottom-start': { bottom: 12, left: 12 },
   };
 
-  const style = posMap[position] || posMap['top-end'];
+  const style = {
+    position: 'fixed',
+    zIndex: 1080,
+    ...(posMap[position] || posMap['top-end']),
+  };
 
   return (
-    <ToastContainer style={style}>
-      <Toast show={show} onClose={onClose} bg={bg} autohide={!!delay} delay={delay}>
+    <ToastContainer style={style} className="p-0">
+      <Toast show={!!show} onClose={onClose} bg={bg} autohide={!!delay} delay={delay}>
         <Toast.Header>
-          <strong className="me-auto">{variant === 'danger' ? 'Error' : 'Success'}</strong>
+          <strong className="me-auto">{title || (variant === 'danger' ? 'Error' : 'Notice')}</strong>
         </Toast.Header>
         <Toast.Body className="text-white">{message}</Toast.Body>
       </Toast>
@@ -37,4 +50,5 @@ ToastMessage.propTypes = {
   variant: PropTypes.oneOf(['success', 'danger', 'warning']),
   delay: PropTypes.number,
   position: PropTypes.string,
+  title: PropTypes.string,
 };
