@@ -1,4 +1,3 @@
-// src/server/routes/tracks.routes.js
 const express = require('express');
 const router = express.Router();
 const auth = require('../middleware/auth.middleware');
@@ -16,5 +15,8 @@ router.get('/', controller.listTracks);           // returns tracks for the logg
 router.post('/', fields, controller.createTrack);
 router.put('/:id', fields, controller.updateTrack);
 router.delete('/:id', controller.deleteTrack);
+
+// server-side streaming download for a track (returns attachment with friendly filename)
+router.get('/:id/download', controller.downloadTrack);
 
 module.exports = router;
