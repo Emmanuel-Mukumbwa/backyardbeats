@@ -38,7 +38,6 @@ app.use('/uploads', express.static(UPLOADS_DIR, {
 }));
 
 app.use('/artistOnboard', require('./routes/artistOnboard.routes'));
-// Then mount other routes
 app.use('/artists', require('./routes/artists.routes'));
 app.use('/tracks', require('./routes/tracks.routes'));
 app.use('/events', require('./routes/events.routes'));
@@ -52,6 +51,7 @@ app.use('/fan', require('./routes/fan.routes'));
 app.use('/public', require('./routes/public.routes'));
 app.use('/fan/playlists', require('./routes/fan.playlists.routes'));
 app.use('/admin', require('./routes/admin.routes'));
+app.use('/meta', require('./routes/meta.routes'));
 
 // Basic health check
 app.get('/health', (req, res) => {
