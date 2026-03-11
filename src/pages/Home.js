@@ -1,21 +1,19 @@
 import React, { useEffect, useState, useContext, useRef } from 'react';
 import axios from '../api/axiosConfig';
 import ArtistCard from '../components/ArtistCard';
-import MapView from '../components/MapView';
 import FeaturedCarousel from '../components/FeaturedCarousel';
 import FilterBar from '../components/FilterBar';
+import NewReleases from '../components/NewReleases';
+import MostPlayed from '../components/MostPlayed';
 import { Button, Alert, Container, Row, Col, Spinner } from 'react-bootstrap';
 import Hero from '../components/Hero';
 import { AuthContext } from '../context/AuthContext';
 import { Link } from 'react-router-dom';
-
-// icons
-import { FaMusic, FaMapMarkerAlt } from 'react-icons/fa';
+import { FaMusic } from 'react-icons/fa';
 
 export default function Home() {
   const [artists, setArtists] = useState([]);
   const [featured, setFeatured] = useState([]);
-  const [showMap, setShowMap] = useState(window.innerWidth >= 992);
   const [filters, setFilters] = useState({ district: '', genre: '', mood: '', q: '' });
   const [loading, setLoading] = useState(false);
   const [selectedId, setSelectedId] = useState(null);
@@ -32,18 +30,13 @@ export default function Home() {
     axios.get('/featured')
       .then(res => setFeatured(res.data || []))
       .catch(() => {});
-    const onResize = () => { if (window.innerWidth < 768) setShowMap(false); };
-    window.addEventListener('resize', onResize);
     return () => {
       unmounted.current = true;
-      window.removeEventListener('resize', onResize);
       clearTimeout(debounceRef.current);
       clearTimeout(autoClearTimerRef.current);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Core loader: accepts params (optional)
   function loadArtists(params = {}) {
     setLoading(true);
     axios.get('/artists', { params })
@@ -51,17 +44,12 @@ export default function Home() {
         const data = res.data || [];
         setArtists(data);
 
-        // If we requested with filters and got zero results, auto-clear filters after short delay
         const filtersActive = Object.values(filters).some(v => v && String(v).trim().length > 0);
         if (data.length === 0 && filtersActive) {
-          // clear any existing pending timer
           clearTimeout(autoClearTimerRef.current);
           autoClearTimerRef.current = setTimeout(() => {
-            // Visual feedback
             setAutoClearMsg('No artists matched your filters — clearing filters and showing all artists.');
-            // clear filters
             setFilters({ district: '', genre: '', mood: '', q: '' });
-            // reload full list
             axios.get('/artists')
               .then(allRes => {
                 if (!unmounted.current) {
@@ -69,7 +57,6 @@ export default function Home() {
                 }
               })
               .catch(() => {});
-            // hide the message after 3s
             setTimeout(() => setAutoClearMsg(''), 3000);
           }, 1500);
         }
@@ -83,16 +70,16 @@ export default function Home() {
       });
   }
 
-  // Auto-apply filters debounce
   useEffect(() => {
-    // Debounce behaviour: wait 400ms after last change to apply
     clearTimeout(debounceRef.current);
+
     debounceRef.current = setTimeout(() => {
       const params = {};
-      if (filters.district) params.district = filters.district;
+      if (filters.district) params.district_id = filters.district;
       if (filters.genre) params.genre = filters.genre;
+      if (filters.mood) params.mood = filters.mood;
       if (filters.q) params.q = filters.q;
-      // if no filters at all, just load all
+
       if (!Object.values(filters).some(v => v && String(v).trim().length > 0)) {
         loadArtists();
       } else {
@@ -100,15 +87,14 @@ export default function Home() {
       }
     }, 400);
 
-    return () => clearTimeout(debounceRef.current); 
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    return () => clearTimeout(debounceRef.current);
   }, [filters]);
 
-  // legacy functions kept for explicit actions (e.g. FilterBar button)
   function applyFilters() {
     const params = {};
-    if (filters.district) params.district = filters.district;
+    if (filters.district) params.district_id = filters.district;
     if (filters.genre) params.genre = filters.genre;
+    if (filters.mood) params.mood = filters.mood;
     if (filters.q) params.q = filters.q;
     loadArtists(params);
   }
@@ -118,15 +104,16 @@ export default function Home() {
     loadArtists();
   }
 
-  function handleMarkerClick(artist) {
-    setSelectedId(artist.id);
-    const el = document.getElementById(`artist-${artist.id}`);
+  function handleArtistSelect(artistId) {
+    setSelectedId(artistId);
+    const el = document.getElementById(`artist-${artistId}`);
+
     if (el) {
       el.scrollIntoView({ behavior: 'smooth', block: 'center' });
       el.classList.add('card-highlight');
       setTimeout(() => el.classList.remove('card-highlight'), 1500);
     } else {
-      window.location.href = `/artist/${artist.id}`;
+      window.location.href = `/artist/${artistId}`;
     }
   }
 
@@ -136,7 +123,8 @@ export default function Home() {
     <div>
       <Hero />
 
-      <Container className="mt-4">
+      <Container fluid className="mt-4 px-lg-5">
+
         {autoClearMsg && <Alert variant="info">{autoClearMsg}</Alert>}
 
         {user?.role === 'artist' && !artistHasProfile && (
@@ -151,45 +139,42 @@ export default function Home() {
           </Alert>
         )}
 
-        <h2 className="mb-3"><FaMusic className="me-2" />Discover Local Artists</h2>
+        <h2 className="mb-4">
+          <FaMusic className="me-2" />
+          Discover Local Artists
+        </h2>
 
+        {/* FEATURED */}
         <FeaturedCarousel items={featured} />
 
-        <Row className="mt-3 align-items-center">
-          <Col xs={12} lg={8}>
-            <FilterBar
-              filters={filters}
-              setFilters={setFilters}
-              onApply={applyFilters}
-              onClear={clearFilters}
-            />
-          </Col>
-          <Col xs={12} lg={4} className="text-end mt-2 mt-lg-0">
-            <Button
-              size="sm"
-              variant={showMap ? 'outline-success' : 'success'}
-              onClick={() => setShowMap(s => !s)}
-            >
-              <FaMapMarkerAlt className="me-1" />
-              {showMap ? 'Hide Map' : 'Show Map'}
-            </Button>
-          </Col>
-        </Row>
+        {/* GLOBAL FILTERS */}
+        <div className="mb-4 p-3 bg-light rounded shadow-sm">
+          <FilterBar
+            filters={filters}
+            setFilters={setFilters}
+            onApply={applyFilters}
+            onClear={clearFilters}
+          />
+        </div>
 
-        <Row className="mt-3">
-          {showMap && (
-            <Col xs={12} lg={4} className="mb-3">
-              <MapView artists={artists} onMarkerClick={handleMarkerClick} />
-            </Col>
-          )}
+        {/* MAIN CONTENT ROW */}
+        <Row className="mt-4">
 
-          <Col xs={12} lg={showMap ? 8 : 12}>
+          {/* ARTISTS GRID */}
+          <Col xs={12} lg={9} className="pe-lg-4">
+
+            <div className="mb-3">
+              <h4 className="mb-1">Artists</h4>
+              <hr />
+            </div>
+
             {loading ? (
               <div className="py-4 text-center">
-                <Spinner animation="border" /> <div className="small text-muted mt-2">Loading artists...</div>
+                <Spinner animation="border" />
+                <div className="small text-muted mt-2">Loading artists...</div>
               </div>
             ) : (
-              <Row className="mt-1">
+              <Row>
                 {artists.length === 0 ? (
                   <Col xs={12}>
                     <div className="py-5 text-center text-muted">
@@ -197,7 +182,9 @@ export default function Home() {
                       <div className="mt-2">Try changing or clearing filters, or check back later.</div>
                       {user?.role === 'artist' && (
                         <div className="mt-3">
-                          <Button as={Link} to="/onboard" variant="outline-success">Create your profile</Button>
+                          <Button as={Link} to="/onboard" variant="outline-success">
+                            Create your profile
+                          </Button>
                         </div>
                       )}
                     </div>
@@ -207,18 +194,41 @@ export default function Home() {
                     <Col
                       key={a.id}
                       id={`artist-${a.id}`}
-                      className={`col-12 col-md-6 col-lg-4 mb-3`}
+                      xs={12}
+                      md={6}
+                      lg={4}
+                      className="mb-4"
                     >
-                      <ArtistCard artist={a} selected={selectedId === a.id} />
+                      <ArtistCard
+                        artist={a}
+                        selected={selectedId === a.id}
+                      />
                     </Col>
                   ))
                 )}
               </Row>
             )}
+
           </Col>
+
+          {/* RIGHT SIDEBAR */}
+          <Col xs={12} lg={3} className="border-start ps-lg-4">
+
+            <div className="mb-4">
+              <h6 className="text-uppercase text-muted mb-2">New Releases</h6>
+              <NewReleases onSelect={handleArtistSelect} />
+            </div>
+
+            <div className="mb-4">
+              <h6 className="text-uppercase text-muted mb-2">Most Played</h6>
+              <MostPlayed onSelect={handleArtistSelect} />
+            </div>
+
+          </Col>
+
         </Row>
+
       </Container>
     </div>
   );
 }
- 
