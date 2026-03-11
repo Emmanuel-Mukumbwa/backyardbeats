@@ -5,7 +5,7 @@ function isAdminIncludeUnapproved(req) {
   return !!(req.user && req.user.role === 'admin' && req.query.include_unapproved === '1');
 }
 
-async function getUserRow(userId) { 
+async function getUserRow(userId) {
   if (!userId) return null;
   const [rows] = await pool.query('SELECT id, username, banned, deleted_at FROM users WHERE id = ? LIMIT 1', [userId]);
   return (rows && rows[0]) || null;
@@ -41,13 +41,49 @@ exports.getUserFavorites = async (req, res, next) => {
         u.banned AS artist_user_banned
       FROM favorites f
       JOIN artists a ON f.artist_id = a.id
-      LEFT JOIN districts d ON a.district_id = d.id
+      -- use user's district (users.district_id) rather than a.district_id (not present)
+      LEFT JOIN districts d ON u.district_id = d.id
       LEFT JOIN users u ON a.user_id = u.id
       WHERE f.user_id = ?
       ORDER BY f.created_at DESC
       LIMIT 200
     `;
-    const [rows] = await pool.query(sql, [userId]);
+
+    // Note: query references u in LEFT JOIN districts, so ensure JOIN order is okay for your MySQL version.
+    // Some MySQL versions allow referencing aliases in subsequent LEFT JOIN clauses only if the alias is defined earlier.
+    // To be safest, swap the two LEFT JOIN lines so users are joined before districts:
+    // LEFT JOIN users u ON a.user_id = u.id
+    // LEFT JOIN districts d ON u.district_id = d.id
+
+    // If you prefer, replace the above SQL with the safe-order version:
+    // (I will run the query using the safe-order SQL below to avoid alias-on-clause issues.)
+
+    const safeSql = `
+      SELECT
+        a.id,
+        a.display_name,
+        a.photo_url,
+        a.user_id,
+        a.avg_rating,
+        a.follower_count,
+        a.has_upcoming_event,
+        d.name AS district,
+        (SELECT COUNT(*) FROM tracks t WHERE t.artist_id = a.id) AS track_count,
+        f.created_at AS followed_at,
+        a.is_approved AS artist_is_approved,
+        a.is_rejected AS artist_is_rejected,
+        u.deleted_at AS artist_user_deleted_at,
+        u.banned AS artist_user_banned
+      FROM favorites f
+      JOIN artists a ON f.artist_id = a.id
+      LEFT JOIN users u ON a.user_id = u.id
+      LEFT JOIN districts d ON u.district_id = d.id
+      WHERE f.user_id = ?
+      ORDER BY f.created_at DESC
+      LIMIT 200
+    `;
+
+    const [rows] = await pool.query(safeSql, [userId]);
 
     const result = (rows || []).map(r => {
       // Filter out banned/deleted/unapproved artists for public use unless admin explicitly asked
