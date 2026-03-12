@@ -1,4 +1,5 @@
 // File: src/components/ConfirmModal.jsx
+//genric confirmation modal used in various places (e.g. delete confirmations, onboarding steps, etc.)
 import React from 'react';
 import PropTypes from 'prop-types';
 import { Modal, Button } from 'react-bootstrap';
