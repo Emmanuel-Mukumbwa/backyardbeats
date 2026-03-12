@@ -14,7 +14,7 @@ export default function AddEventModal({ show, onHide, onSaved, editing = null, d
   const [image, setImage] = useState(null);            // File object to upload
   const [imagePreview, setImagePreview] = useState(null); // local preview URL or existing remote url
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState(null);
+  const [error, setError] = useState(null); 
 
   // helper: resolve backend URL for existing image (if editing contains relative path)
   const resolveBackendUrl = (raw) => {
