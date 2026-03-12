@@ -93,7 +93,7 @@ export default function AudioPlayer({ tracks = [], onPlay = null }) {
     const audio = audioRef.current;
     if (!audio) return;
 
-    function onTime() {
+    function onTime() { 
       setProgress(audio.currentTime || 0);
     }
     function onLoaded() {
