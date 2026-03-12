@@ -1,4 +1,5 @@
 // File: src/components/LoadingSpinner.jsx
+//used globaly throughout the app, so we can easily change the look and feel of all spinners by changing this one component
 import React from 'react';
 import { Spinner } from 'react-bootstrap';
 import PropTypes from 'prop-types';
@@ -14,7 +15,7 @@ export default function LoadingSpinner({ size = 'md', inline = false }) {
   return inline ? <span className="align-middle">{spinner}</span> : <div className="d-flex justify-content-center align-items-center">{spinner}</div>;
 }
 
-LoadingSpinner.propTypes = {
+LoadingSpinner.propTypes = { 
   size: PropTypes.oneOf(['sm', 'md', 'lg']),
   inline: PropTypes.bool,
 };
