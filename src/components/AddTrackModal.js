@@ -14,7 +14,7 @@ export default function AddTrackModal({ show, onHide, onSaved, editing = null, g
 
   useEffect(() => {
     if (editing) {
-      setTitle(editing.title || '');
+      setTitle(editing.title || ''); 
       setGenre(editing.genre || '');
       setDuration(editing.duration || '');
       setFile(null);
