@@ -18,4 +18,4 @@ router.get('/listens/summary', listensController.getUserListensSummary);
 // DELETE /fan/listens -> clear history
 router.delete('/listens', listensController.clearUserListens);
 
-module.exports = router;
+module.exports = router; 
