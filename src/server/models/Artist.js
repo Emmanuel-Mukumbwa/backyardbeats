@@ -1,13 +1,12 @@
-// server/models/Artist.js
+// src/server/models/Artist.js
 const { DataTypes } = require('sequelize');
-const sequelize = require('../db'); // sequelize instance (server/db.js)
-const User = require('./User');
+const sequelize = require('../db'); // your sequelize instance
 
 const Artist = sequelize.define('Artist', {
   id: {
     type: DataTypes.INTEGER.UNSIGNED,
     primaryKey: true,
-    autoIncrement: true // assuming your migrations allow this
+    autoIncrement: true
   },
   display_name: {
     type: DataTypes.STRING(100),
@@ -16,7 +15,7 @@ const Artist = sequelize.define('Artist', {
   bio: {
     type: DataTypes.TEXT,
     allowNull: true
-  }, 
+  },
   photo_url: {
     type: DataTypes.STRING(255),
     allowNull: true
@@ -29,10 +28,6 @@ const Artist = sequelize.define('Artist', {
     type: DataTypes.DECIMAL(9,6),
     allowNull: true
   },
-  district_id: {
-    type: DataTypes.INTEGER,
-    allowNull: true
-  },
   avg_rating: {
     type: DataTypes.DECIMAL(3,2),
     allowNull: true
@@ -41,9 +36,44 @@ const Artist = sequelize.define('Artist', {
     type: DataTypes.BOOLEAN,
     defaultValue: false
   },
+  is_approved: {
+    type: DataTypes.BOOLEAN,
+    allowNull: false,
+    defaultValue: false
+  },
+  is_rejected: {
+    type: DataTypes.BOOLEAN,
+    allowNull: false,
+    defaultValue: false
+  },
+  approved_at: {
+    type: DataTypes.DATE,
+    allowNull: true
+  },
+  rejected_at: {
+    type: DataTypes.DATE,
+    allowNull: true
+  },
+  approved_by: {
+    type: DataTypes.INTEGER,
+    allowNull: true
+  },
+  rejected_by: {
+    type: DataTypes.INTEGER,
+    allowNull: true
+  },
+  rejection_reason: {
+    type: DataTypes.STRING(512),
+    allowNull: true
+  },
   user_id: {
     type: DataTypes.INTEGER,
     allowNull: true
+  },
+  follower_count: {
+    type: DataTypes.INTEGER,
+    allowNull: false,
+    defaultValue: 0
   }
 }, {
   tableName: 'artists',
@@ -51,7 +81,7 @@ const Artist = sequelize.define('Artist', {
   underscored: true
 });
 
-// association (optional)
-Artist.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
+// NOTE: do NOT create associations here to avoid circular requires.
+// Associations are declared centrally in models/index.js
 
 module.exports = Artist;
