@@ -17,7 +17,7 @@ import FavoriteArtists from '../components/FavoriteArtists';
 import MyEvents from '../components/MyEvents';
 import { AuthContext } from '../context/AuthContext';
 import AudioPlayer from '../components/AudioPlayer';
-import RecentlyUploaded from '../components/RecentlyUploaded';
+import RecentlyUploaded from '../components/RecentlyUploaded'; 
 import MyRatings from '../components/MyRatings';
 import PlaylistsList from '../components/PlaylistsList';
 
