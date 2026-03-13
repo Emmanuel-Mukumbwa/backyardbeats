@@ -36,7 +36,7 @@ const Artist = sequelize.define('Artist', {
     type: DataTypes.BOOLEAN,
     defaultValue: false
   },
-  is_approved: {
+  is_approved: { 
     type: DataTypes.BOOLEAN,
     allowNull: false,
     defaultValue: false
