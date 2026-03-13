@@ -1,3 +1,4 @@
+//src/server/routes/districts.routes.js
 const express = require('express');
 const router = express.Router();
 const districtsController = require('../controllers/districtsController.controller');
