@@ -1,3 +1,4 @@
+// src/App.jsx
 import React from 'react';
 import { Routes, Route } from 'react-router-dom';
 import Navbar from './components/Navbar';
@@ -12,17 +13,18 @@ import ArtistOnboarding from './pages/ArtistOnboarding';
 import ArtistDashboard from './pages/ArtistDashboard';
 import FanDashboard from './pages/FanDashboard';
 import AdminDashboard from './pages/AdminDashboard';
+import Support from './pages/SupportPage';
 import { AuthProvider } from './context/AuthContext';
 import RequireAuth from './components/RequireAuth';
 import RequireRole from './components/RequireRole';
 import EventDetail from './pages/EventDetail';
-  
+
 export default function App() {
   return (
     <AuthProvider>
       <div className="d-flex flex-column min-vh-100">
         <Navbar />
-        <main className="flex-fill container py-3"> 
+        <main className="flex-fill container py-3">
           <Routes>
             <Route path="/" element={<Home />} />
             <Route path="/artist/:id" element={<ArtistDetail />} />
@@ -31,34 +33,55 @@ export default function App() {
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
             <Route path="/orientation" element={<Orientation />} />
-            <Route path="/onboard" element={
-              <RequireAuth>
-                <RequireRole roles={["artist","admin"]}>
-                  <ArtistOnboarding />
-                </RequireRole>
-              </RequireAuth>
-            } />
-            <Route path="/artist/dashboard" element={
-              <RequireAuth>
-                <RequireRole roles={["artist"]}>
-                  <ArtistDashboard />
-                </RequireRole>
-              </RequireAuth>
-            } /> 
-            <Route path="/fan/dashboard" element={
-              <RequireAuth>
-                <RequireRole roles={["fan"]}>
-                  <FanDashboard />
-                </RequireRole>
-              </RequireAuth>
-            } />
-            <Route path="/admin" element={
-              <RequireAuth>
-                <RequireRole roles={["admin"]}>
-                  <AdminDashboard />
-                </RequireRole>
-              </RequireAuth>
-            } />
+            <Route
+              path="/onboard"
+              element={
+                <RequireAuth>
+                  <RequireRole roles={['artist', 'admin']}>
+                    <ArtistOnboarding />
+                  </RequireRole>
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/artist/dashboard"
+              element={
+                <RequireAuth>
+                  <RequireRole roles={['artist']}>
+                    <ArtistDashboard />
+                  </RequireRole>
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/fan/dashboard"
+              element={
+                <RequireAuth>
+                  <RequireRole roles={['fan']}>
+                    <FanDashboard />
+                  </RequireRole>
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/admin"
+              element={
+                <RequireAuth>
+                  <RequireRole roles={['admin']}>
+                    <AdminDashboard />
+                  </RequireRole>
+                </RequireAuth>
+              }
+            />
+            {/* Support route - require auth to create tickets */}
+            <Route
+              path="/support"
+              element={
+                <RequireAuth>
+                  <Support />
+                </RequireAuth>
+              }
+            />
           </Routes>
         </main>
         <Footer />
