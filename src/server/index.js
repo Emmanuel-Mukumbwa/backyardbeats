@@ -52,6 +52,9 @@ app.use('/public', require('./routes/public.routes'));
 app.use('/fan/playlists', require('./routes/fan.playlists.routes'));
 app.use('/admin', require('./routes/admin.routes'));
 app.use('/meta', require('./routes/meta.routes'));
+app.use('/support', require('./routes/support.routes'));
+app.use('/minetracks', require('./routes/tracks.mine.routes'));
+app.use('/mineevents', require('./routes/events.mine.routes'));
 
 // Basic health check
 app.get('/health', (req, res) => {
