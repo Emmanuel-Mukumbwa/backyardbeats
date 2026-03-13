@@ -274,8 +274,8 @@ export default function Login() {
           </div>
 
           <div className="mt-2 text-muted small">
-            Need help? Contact <a href="mailto:support@backyardbeats.local">support</a>.
-          </div>
+          Need help? Contact <Link to="/support">support</Link>.
+          </div> 
         </Card.Body>
       </Card>
     </>
