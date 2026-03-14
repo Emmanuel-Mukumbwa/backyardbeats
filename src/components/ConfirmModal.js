@@ -8,7 +8,7 @@ import { Modal, Button } from 'react-bootstrap';
  * ConfirmModal - reusable confirmation/message modal
  *
  * Props:
- * - show, onHide
+ * - show, onHide 
  * - title, message
  * - onConfirm: called when user confirms
  * - confirmText, cancelText
