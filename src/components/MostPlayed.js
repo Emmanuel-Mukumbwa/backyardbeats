@@ -10,20 +10,21 @@ export default function MostPlayed({ limit = 6, onSelect = () => {} }) {
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const playingRef = useRef(null);
+  const mountedRef = useRef(true);
 
   useEffect(() => {
-    let mounted = true;
+    mountedRef.current = true;
     setLoading(true);
     axios.get('/public/tracks/most-played', { params: { limit, page } })
       .then(res => {
-        if (!mounted) return;
+        if (!mountedRef.current) return;
         const data = res.data || {};
         setItems(data.items || []);
         setTotal(data.total || 0);
       })
-      .catch(() => { if (mounted) setItems([]); })
-      .finally(() => { if (mounted) setLoading(false); });
-    return () => { mounted = false; };
+      .catch(() => { if (mountedRef.current) setItems([]); })
+      .finally(() => { if (mountedRef.current) setLoading(false); });
+    return () => { mountedRef.current = false; };
   }, [limit, page]);
 
   function handlePlay(audioEl) {
@@ -55,48 +56,66 @@ export default function MostPlayed({ limit = 6, onSelect = () => {} }) {
           const plays = Number(t.plays || 0);
 
           return (
-            <ListGroup.Item key={t.id} className="d-flex align-items-center">
-              {artwork ? (
-                <Image src={artwork} rounded style={{ width: 56, height: 56, objectFit: 'cover', marginRight: 10 }} />
-              ) : (
-                <div style={{ width: 56, height: 56, marginRight: 10, background: '#eee', borderRadius: 6 }} />
-              )}
+            <ListGroup.Item key={t.id} className="py-2">
+              <div className="d-flex align-items-start">
+                {artwork ? (
+                  <Image src={artwork} rounded style={{ width: 56, height: 56, objectFit: 'cover', marginRight: 12 }} />
+                ) : (
+                  <div style={{ width: 56, height: 56, marginRight: 12, background: '#eee', borderRadius: 6 }} />
+                )}
 
-              <div className="flex-grow-1">
-                <div className="d-flex align-items-center">
-                  <div className="small fw-bold text-truncate" style={{ maxWidth: 160 }}>{t.title}</div>
-                  <div className="small text-muted ms-2 text-truncate" style={{ maxWidth: 120 }}>{artistName}</div>
+                <div className="flex-grow-1">
+                  <div className="d-flex align-items-start justify-content-between">
+                    <div style={{ minWidth: 0 }}>
+                      <div
+                        className="small fw-bold text-truncate"
+                        style={{ maxWidth: '100%', cursor: artistId ? 'pointer' : 'default' }}
+                        onClick={() => artistId && onSelect(artistId)}
+                        title={t.title}
+                      >
+                        {t.title}
+                      </div>
+                      <div className="small text-muted" style={{ marginTop: 4 }}>
+                        {artistName ? `${artistName} ` : ''}{t.genre ? `• ${t.genre}` : ''}{t.release_date ? ` • ${t.release_date}` : ''}
+                      </div>
+                    </div>
+
+                    <div className="ms-2 text-muted small" style={{ whiteSpace: 'nowrap' }}>
+                      {plays}
+                    </div>
+                  </div>
+
+                  <div className="d-flex align-items-center mt-2">
+                    {preview ? (
+                      <audio
+                        controls
+                        preload="none"
+                        style={{ width: 120, height: 30 }}
+                        src={preview}
+                        onPlay={e => handlePlay(e.target)}
+                        onPause={e => handlePause(e.target)}
+                        onEnded={() => { if (playingRef.current) playingRef.current = null; }}
+                        aria-label={`Preview for ${t.title}`}
+                      />
+                    ) : (
+                      <div className="small text-muted me-2">No preview</div>
+                    )}
+
+                    {download ? (
+                      <Button
+                        size="sm"
+                        variant="link"
+                        href={download}
+                        download
+                        title="Download track"
+                        className="ms-3 p-0"
+                        aria-label={`Download ${t.title}`}
+                      >
+                        <FaDownload />
+                      </Button>
+                    ) : null}
+                  </div>
                 </div>
-                <div className="small text-muted">{t.genre ? `${t.genre} • ` : ''}{t.release_date || ''}</div>
-              </div>
-
-              <div className="d-flex align-items-center ms-2">
-                {preview ? (
-                  <audio
-                    controls
-                    preload="none"
-                    style={{ width: 160 }}
-                    src={preview}
-                    onPlay={e => handlePlay(e.target)}
-                    onPause={e => handlePause(e.target)}
-                    onEnded={() => { if (playingRef.current) playingRef.current = null; }}
-                  />
-                ) : <div className="small text-muted me-2">No preview</div>}
-
-                <div className="small text-muted ms-2 me-2" style={{ minWidth: 40, textAlign: 'right' }}>{plays}</div>
-
-                {download ? (
-                  <Button
-                    size="sm"
-                    variant="link"
-                    href={download}
-                    download
-                    title="Download track"
-                    className="ms-2"
-                  >
-                    <FaDownload />
-                  </Button>
-                ) : null}
               </div>
             </ListGroup.Item>
           );
