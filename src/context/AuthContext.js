@@ -9,7 +9,7 @@ const SAFE_KEYS = [
   'authToken', 'userRole', 'userName', 'userId', 'isLoggedIn'
 ];
 
-function safeParse(raw) { 
+function safeParse(raw) {
   try {
     return JSON.parse(raw);
   } catch (e) {
@@ -17,13 +17,11 @@ function safeParse(raw) {
   }
 }
 
-// Decode full JWT payload (no signature verification)
 function decodeJwtPayload(token) {
   try {
     if (!token) return null;
     const parts = token.split('.');
     if (parts.length < 2) return null;
-    // atob is available in browsers; for older envs consider polyfill
     const payload = JSON.parse(atob(parts[1]));
     return payload;
   } catch (e) {
@@ -33,14 +31,12 @@ function decodeJwtPayload(token) {
   }
 }
 
-// Keep backward-compatible helper that returns user id
 function decodeJwtUserId(token) {
   const payload = decodeJwtPayload(token);
   if (!payload) return null;
   return payload.userId || payload.id || null;
 }
 
-// Clear auth-related localStorage keys
 function clearAuthStorage() {
   try {
     SAFE_KEYS.forEach(k => localStorage.removeItem(k));
@@ -50,11 +46,10 @@ function clearAuthStorage() {
 }
 
 export const AuthProvider = ({ children }) => {
-  const [user, setUser] = useState(null); // canonical user object (includes token when available)
-  const [artist, setArtist] = useState(null); // artist profile (if user is an artist)
-  const [loading, setLoading] = useState(true); // overall auth hydration state
+  const [user, setUser] = useState(null);
+  const [artist, setArtist] = useState(null);
+  const [loading, setLoading] = useState(true);
 
-  // Helper: set axios auth header (best-effort)
   const applyAxiosAuthHeader = (token) => {
     try {
       if (token) {
@@ -68,7 +63,6 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  // Fetch artist profile for currently authenticated user (if any)
   const fetchArtistProfile = useCallback(async () => {
     try {
       const res = await axios.get('/profile/me');
@@ -79,13 +73,11 @@ export const AuthProvider = ({ children }) => {
       setArtist(null);
       return null;
     } catch (err) {
-      // Could be 401 (no profile or not artist) or network error
       setArtist(null);
       return null;
     }
   }, []);
 
-  // Save user and token into localStorage in all expected formats
   const saveAllStorages = (userData) => {
     try {
       const token = userData.token || localStorage.getItem('bb_token') || localStorage.getItem('authToken') || null;
@@ -104,7 +96,6 @@ export const AuthProvider = ({ children }) => {
       if (userObj.userId || userObj.id) localStorage.setItem('userId', String(userObj.userId ?? userObj.id));
       localStorage.setItem('isLoggedIn', 'true');
 
-      // Ensure axios has header for subsequent immediate requests
       if (token) applyAxiosAuthHeader(token);
     } catch (e) {
       // eslint-disable-next-line no-console
@@ -112,21 +103,19 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  // Remove auth state (local + memory)
-  const clearAllAuth = () => {
+  // Stabilize clearAllAuth so callbacks can depend on it safely
+  const clearAllAuth = useCallback(() => {
     setUser(null);
     setArtist(null);
     clearAuthStorage();
     applyAxiosAuthHeader(null);
-  };
+  }, []);
 
-  // Primary login action (frontend uses this after /auth/login)
   const login = (userData) => {
     if (!userData) return;
     const token = userData.token || null;
 
     let composedUser = { ...userData };
-    // Populate userId if missing by decoding token
     if (!composedUser.userId && token) {
       const decodedId = decodeJwtUserId(token);
       if (decodedId) composedUser.userId = String(decodedId);
@@ -135,14 +124,11 @@ export const AuthProvider = ({ children }) => {
     setUser(composedUser);
     saveAllStorages(composedUser);
 
-    // If user is artist or has_profile true, try to fetch artist profile immediately
     if (composedUser.role === 'artist' || composedUser.has_profile === true) {
-      // fire-and-forget; components can call fetchArtistProfile too
       fetchArtistProfile().catch(() => {});
     }
   };
 
-  // Update stored user (merge) and persist
   const updateUser = (updates) => {
     const newUser = { ...(user || {}), ...updates };
     setUser(newUser);
@@ -167,7 +153,6 @@ export const AuthProvider = ({ children }) => {
       }
       if (userCopy.userId || userCopy.id) localStorage.setItem('userId', String(userCopy.userId ?? userCopy.id));
 
-      // If role or has_profile changed to artist, refresh artist data
       if (userCopy.role === 'artist' || userCopy.has_profile === true) {
         fetchArtistProfile().catch(() => {});
       }
@@ -177,7 +162,6 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  // Logout: server best-effort, then clear frontend state
   const logout = async () => {
     try {
       await axios.post('/auth/logout').catch(() => {});
@@ -188,11 +172,9 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  // Hydrate on app start: discover token, call /auth/check and populate user + artist
   const verifyAndHydrate = useCallback(async () => {
     setLoading(true);
     try {
-      // 1) discover token from known storage spots
       let token = localStorage.getItem('bb_token') || null;
       if (!token) {
         const rawBbAuth = localStorage.getItem('bb_auth');
@@ -205,34 +187,28 @@ export const AuthProvider = ({ children }) => {
       if (!token) token = localStorage.getItem('authToken') || null;
 
       if (!token) {
-        // No token found — ensure we are clean
         clearAllAuth();
         return;
       }
 
-      // 2) local expiration check if payload contains exp
       const payload = decodeJwtPayload(token);
       if (payload && payload.exp) {
         const now = Math.floor(Date.now() / 1000);
         if (payload.exp < now) {
-          // token expired locally
           clearAllAuth();
           return;
         }
       }
 
-      // ensure axios uses header for /auth/check
       applyAxiosAuthHeader(token);
 
-      // 3) verify with backend
       try {
-        const res = await axios.get('/auth/check'); // axios interceptor/header will include token
+        const res = await axios.get('/auth/check');
         if (res?.data?.user) {
           const remoteUser = res.data.user;
           const composed = { ...remoteUser, token };
           setUser(composed);
 
-          // persist canonical formats
           try {
             localStorage.setItem('bb_token', token);
             localStorage.setItem('authToken', token);
@@ -246,7 +222,6 @@ export const AuthProvider = ({ children }) => {
             // ignore storage errors
           }
 
-          // If this user is an artist or has_profile true, fetch artist profile
           if (composed.role === 'artist' || composed.has_profile === true) {
             await fetchArtistProfile();
           } else {
@@ -255,40 +230,33 @@ export const AuthProvider = ({ children }) => {
 
           return;
         } else {
-          // Unexpected shape -> treat as unauthenticated
           clearAllAuth();
           return;
         }
       } catch (err) {
-        // If verification failed (401 or network), clear stale auth so app doesn't assume logged-in
         clearAllAuth();
         return;
       }
     } finally {
       setLoading(false);
     }
-  }, [fetchArtistProfile]);
+  }, [fetchArtistProfile, clearAllAuth]);
 
-  // Manual refresh wrapper
   const refresh = async () => {
     await verifyAndHydrate();
   };
 
-  // Listen to localStorage changes to react to logout/login in other tabs
   useEffect(() => {
     verifyAndHydrate();
 
     const onStorage = (e) => {
       if (!e.key) return;
-      // If auth keys changed (or cleared) update state
       if (SAFE_KEYS.includes(e.key)) {
-        // If token removed -> clear state, if token added -> re-verify
         const hasToken = !!localStorage.getItem('bb_token') || !!localStorage.getItem('authToken');
         if (!hasToken) {
           setUser(null);
           setArtist(null);
         } else {
-          // perform a lightweight verify in background
           verifyAndHydrate().catch(() => {});
         }
       }
@@ -298,15 +266,14 @@ export const AuthProvider = ({ children }) => {
     return () => window.removeEventListener('storage', onStorage);
   }, [verifyAndHydrate]);
 
-  // Keep axios header in sync when user.token changes in-memory
   useEffect(() => {
     const token = user?.token || localStorage.getItem('bb_token') || localStorage.getItem('authToken') || null;
     applyAxiosAuthHeader(token);
   }, [user]);
 
-  // role helpers
+  // clarify mixed operators with parentheses
   const isAuthenticated = !!user;
-  const isArtist = !!user && (user.role === 'artist' || user.role === 'admin' && !!artist); // admin may see artist management too
+  const isArtist = !!user && (user.role === 'artist' || (user.role === 'admin' && !!artist));
   const isAdmin = !!user && user.role === 'admin';
   const isFan = !!user && user.role === 'fan';
 
