@@ -18,17 +18,16 @@ function bool(v) {
 
 /**
  * GET /artists
- * Optional query params:
- *   - district (id)         -> filters by users.district_id
- *   - q (search by display_name)
- *   - include_unapproved=1  -> only for admin
- *   - limit                 -> optional limit (max 500)
- *   - offset                -> optional offset
+ * Query params supported:
+ *  - district or district_id (integer)
+ *  - q (search by artist display_name OR track title)
+ *  - genre (genre name)
+ *  - mood  (mood name)
+ *  - include_unapproved=1 (admin only)
+ *  - limit (max 500)  -> default 4 (page size)
+ *  - offset (>=0)
  *
- * By default only returns approved artists whose account is not deleted and not banned.
- *
- * Returns genre_names and mood_names (comma-separated -> array) to help frontend display badges.
- * Also returns tracks_count and approved_tracks_count.
+ * Returns JSON: { items: [...], total }
  */
 exports.listArtists = async (req, res, next) => {
   try {
@@ -37,9 +36,10 @@ exports.listArtists = async (req, res, next) => {
 
     const adminOverride = isAdminIncludeUnapproved(req);
 
-    // Search by district (uses users.district_id)
-    if (req.query.district) {
-      const districtId = Number(req.query.district);
+    // District (accept district or district_id)
+    const districtRaw = req.query.district || req.query.district_id;
+    if (districtRaw) {
+      const districtId = Number(districtRaw);
       if (!Number.isInteger(districtId)) {
         return res.status(400).json({ error: 'Invalid district id' });
       }
@@ -47,10 +47,31 @@ exports.listArtists = async (req, res, next) => {
       params.push(districtId);
     }
 
-    // Search by name (display_name)
+    // Search by name (display_name) OR track title (t.title)
     if (req.query.q) {
-      where += ' AND a.display_name LIKE ?';
-      params.push(`%${req.query.q}%`);
+      where += ' AND (a.display_name LIKE ? OR t.title LIKE ?)';
+      const qLike = `%${req.query.q}%`;
+      params.push(qLike, qLike);
+    }
+
+    // Filter by genre name (artist must have the genre)
+    if (req.query.genre) {
+      where += ` AND EXISTS (
+        SELECT 1 FROM artist_genres ag2
+        JOIN genres g2 ON ag2.genre_id = g2.id
+        WHERE ag2.artist_id = a.id AND g2.name = ?
+      )`;
+      params.push(req.query.genre);
+    }
+
+    // Filter by mood name
+    if (req.query.mood) {
+      where += ` AND EXISTS (
+        SELECT 1 FROM artist_moods am2
+        JOIN moods m2 ON am2.mood_id = m2.id
+        WHERE am2.artist_id = a.id AND m2.name = ?
+      )`;
+      params.push(req.query.mood);
     }
 
     // Default visibility constraints (unless admin override)
@@ -62,7 +83,7 @@ exports.listArtists = async (req, res, next) => {
 
     // Pagination / limit (safe caps)
     const maxLimit = 500;
-    let limit = 200;
+    let limit = 4; // default page size = 4 (frontend expects 4-per-page)
     if (req.query.limit) {
       const qlim = Number(req.query.limit);
       if (Number.isInteger(qlim) && qlim > 0) limit = Math.min(qlim, maxLimit);
@@ -73,11 +94,19 @@ exports.listArtists = async (req, res, next) => {
       if (Number.isInteger(qoff) && qoff >= 0) offset = qoff;
     }
 
-    /**
-     * NOTE: We left the genre/mood joins in place and add a LEFT JOIN to tracks
-     * for counts. We use COUNT(DISTINCT ...) to avoid inflated counts due to
-     * the other joins.
-     */
+    // Count total distinct matching artists for pagination
+    const countSql = `
+      SELECT COUNT(DISTINCT a.id) AS total
+      FROM artists a
+      LEFT JOIN users u ON a.user_id = u.id
+      LEFT JOIN tracks t ON t.artist_id = a.id
+      ${where}
+    `;
+    const paramsForCount = params.slice();
+    const [countRows] = await pool.query(countSql, paramsForCount);
+    const total = (countRows && countRows[0] && Number(countRows[0].total)) ? Number(countRows[0].total) : 0;
+
+    // Main select (with metadata and counts)
     const sql = `
       SELECT
         a.*,
@@ -104,11 +133,12 @@ exports.listArtists = async (req, res, next) => {
       LIMIT ? OFFSET ?
     `;
 
-    params.push(limit, offset);
+    const paramsForRows = params.slice();
+    paramsForRows.push(limit, offset);
 
-    const [rows] = await pool.query(sql, params);
+    const [rows] = await pool.query(sql, paramsForRows);
 
-    const result = (rows || []).map(r => {
+    const items = (rows || []).map(r => {
       const status = r.is_approved ? 'approved' : (r.is_rejected ? 'rejected' : 'pending');
 
       // genre_names & mood_names -> arrays
@@ -134,7 +164,6 @@ exports.listArtists = async (req, res, next) => {
         approved_tracks_count: Number(r.approved_tracks_count || 0)
       };
 
-      // Admin-only metadata when explicitly requested by an admin
       if (adminOverride) {
         base.is_approved = bool(r.is_approved);
         base.is_rejected = bool(r.is_rejected);
@@ -153,7 +182,7 @@ exports.listArtists = async (req, res, next) => {
       return base;
     });
 
-    return res.json(result);
+    return res.json({ items, total });
   } catch (err) {
     next(err);
   }
@@ -234,7 +263,7 @@ exports.getArtistById = async (req, res, next) => {
 
     // Determine requester permissions
     const isOwnerRequest = !!(req.user && req.user.id && Number(req.user.id) === Number(artist.user_id));
-
+ 
     // Tracks: apply visibility rules
     const trackParams = [artist.id];
     let trackSql = `SELECT id, artist_id, title, preview_url, duration, preview_artwork, genre, release_date, created_at,
