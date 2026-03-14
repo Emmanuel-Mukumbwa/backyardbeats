@@ -1,5 +1,5 @@
 // src/pages/ArtistDashboard.js
-import React, { useState, useEffect, useContext } from 'react';
+import React, { useState, useEffect,  useRef, useCallback } from 'react';
 import {
   Tabs,
   Tab,
@@ -14,7 +14,6 @@ import {
 } from 'react-bootstrap';
 import { useNavigate } from 'react-router-dom';
 import axios from '../api/axiosConfig';
-import { AuthContext } from '../context/AuthContext';
 import RatingsList from '../components/RatingsList';
 import ToastMessage from '../components/ToastMessage';
 import LoadingSpinner from '../components/LoadingSpinner';
@@ -30,8 +29,7 @@ import { FaMusic, FaCalendarAlt, FaChartLine, FaPlus, FaEdit, FaUserCircle } fro
 
 export default function ArtistDashboard() {
   const navigate = useNavigate();
-  const { user } = useContext(AuthContext);
-
+ 
   const [artist, setArtist] = useState(null);
   const [tracks, setTracks] = useState([]);
   const [events, setEvents] = useState([]);
@@ -55,10 +53,40 @@ export default function ArtistDashboard() {
   // Toast state (re-usable ToastMessage)
   const [toast, setToast] = useState({ show: false, message: '', variant: 'warning', delay: 5000 });
 
+  // Controlled tabs: persist on refresh using hash -> localStorage fallback
+  const [activeTab, setActiveTab] = useState('overview');
+  const tabHideTimerRef = useRef(null);
+
   useEffect(() => {
-    loadDashboardData();
-    // eslint-disable-next-line
+    // initialize active tab from hash or localStorage
+    const initFromHash = (window.location.hash || '').replace('#', '');
+    const saved = localStorage.getItem('artistDashboard.activeTab');
+    const initial = initFromHash || saved || 'overview';
+    // ensure it's a valid tab key (fallback safeguard)
+    const allowed = ['overview', 'tracks', 'events', 'analytics'];
+    setActiveTab(allowed.includes(initial) ? initial : 'overview');
   }, []);
+
+  // Persist tab selection (hash + localStorage)
+  const persistTab = (tabKey) => {
+    try {
+      localStorage.setItem('artistDashboard.activeTab', tabKey);
+      // update URL hash without adding history entry
+      const url = new URL(window.location.href);
+      url.hash = `#${tabKey}`;
+      window.history.replaceState(null, '', url.toString());
+    } catch (e) {
+      // ignore persistence errors
+      // eslint-disable-next-line no-console
+      console.debug('persistTab error', e);
+    }
+  };
+
+  const handleTabSelect = (k) => {
+    if (!k) return;
+    setActiveTab(k);
+    persistTab(k);
+  };
 
   // helper: build backend base
   const backendBase = (() => {
@@ -147,7 +175,7 @@ export default function ArtistDashboard() {
   }
 
   // load meta, profile, tracks, events, ratings, districts
-  async function loadDashboardData() {
+  const loadDashboardData = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
@@ -216,14 +244,26 @@ export default function ArtistDashboard() {
     } finally {
       setLoading(false);
     }
-  }
+  }, []); // stable identity, no external deps needed (setState functions are stable)
+
+  useEffect(() => {
+    loadDashboardData();
+  }, [loadDashboardData]);
 
   // helpers for Add Track/Event: check if artist is allowed to create
   const artistStatus = computeArtistStatus(artist);
 
   function showRestrictedToast(message, delay = 5000, variant = 'warning') {
     setToast({ show: true, message, variant, delay });
-    setTimeout(() => setToast(prev => ({ ...prev, show: false })), delay + 200);
+    if (tabHideTimerRef.current) clearTimeout(tabHideTimerRef.current);
+    tabHideTimerRef.current = setTimeout(() => setToast(prev => ({ ...prev, show: false })), delay + 200);
+  }
+
+  // show success toast helper (centralized)
+  function showSuccessToast(message, delay = 3500) {
+    setToast({ show: true, message, variant: 'success', delay });
+    if (tabHideTimerRef.current) clearTimeout(tabHideTimerRef.current);
+    tabHideTimerRef.current = setTimeout(() => setToast(prev => ({ ...prev, show: false })), delay + 200);
   }
 
   const handleAddTrackClick = () => {
@@ -277,13 +317,25 @@ export default function ArtistDashboard() {
   };
 
   // CRUD handlers still call API
-  const onTrackSaved = () => {
+  // NOTE: onTrackSaved/onEventSaved now accept the saved resource (if provided by the modal)
+  const onTrackSaved = (savedData) => {
+    const wasEdit = !!editingTrack;
+    // show dashboard-level toast
+    showSuccessToast(wasEdit ? 'Track updated successfully' : 'Track added successfully');
+    // switch to tracks tab
+    setActiveTab('tracks');
+    persistTab('tracks');
+    // reload and close modal
     loadDashboardData();
     setShowTrackModal(false);
     setEditingTrack(null);
   };
 
-  const onEventSaved = () => {
+  const onEventSaved = (savedData) => {
+    const wasEdit = !!editingEvent;
+    showSuccessToast(wasEdit ? 'Event updated successfully' : 'Event added successfully');
+    setActiveTab('events');
+    persistTab('events');
     loadDashboardData();
     setShowEventModal(false);
     setEditingEvent(null);
@@ -293,7 +345,9 @@ export default function ArtistDashboard() {
     if (!window.confirm('Delete this track?')) return;
     try {
       await axios.delete(`/tracks/${id}`);
+      showSuccessToast('Track deleted');
       loadDashboardData();
+      // remain on current tab
     } catch (err) {
       showRestrictedToast(err.response?.data?.error || err.message || 'Failed to delete track', 5000, 'danger');
     }
@@ -303,6 +357,7 @@ export default function ArtistDashboard() {
     if (!window.confirm('Delete this event?')) return;
     try {
       await axios.delete(`/events/${id}`);
+      showSuccessToast('Event deleted');
       loadDashboardData();
     } catch (err) {
       showRestrictedToast(err.response?.data?.error || err.message || 'Failed to delete event', 5000, 'danger');
@@ -322,6 +377,13 @@ export default function ArtistDashboard() {
       console.debug('recordListen ignored error', e);
     }
   };
+
+  useEffect(() => {
+    // cleanup toast hide timer on unmount
+    return () => {
+      if (tabHideTimerRef.current) clearTimeout(tabHideTimerRef.current);
+    };
+  }, []);
 
   if (loading) return <div className="text-center py-5"><LoadingSpinner size="lg" /></div>;
   if (error) return <Alert variant="danger">{error}</Alert>;
@@ -377,7 +439,7 @@ export default function ArtistDashboard() {
         </div>
       </div>
 
-      <Tabs defaultActiveKey="overview" id="artist-dashboard-tabs" className="mb-3">
+      <Tabs activeKey={activeTab} id="artist-dashboard-tabs" className="mb-3" onSelect={handleTabSelect}>
         <Tab eventKey="overview" title={<span><FaUserCircle className="me-1" /> Overview</span>}>
           <Row className="mt-3">
             <Col md={4}>
@@ -404,7 +466,7 @@ export default function ArtistDashboard() {
                   <Card.Text className="text-muted small">{artist.bio || 'No bio yet — tell fans about your music.'}</Card.Text>
 
                   <div className="d-flex justify-content-center mt-3">
-                    <Button variant="outline-primary" size="sm" onClick={() => navigate('/artist/${artist.id}')}>
+                    <Button variant="outline-primary" size="sm" onClick={() => navigate(`/artist/${artist.id}`)}>
                       <FaEdit className="me-1" /> Edit Profile
                     </Button>
                   </div>
