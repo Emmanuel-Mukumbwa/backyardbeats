@@ -2,7 +2,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import {
   Table, Button, Badge, Offcanvas, Form, Spinner, Row, Col, InputGroup, FormControl, ListGroup
 } from 'react-bootstrap';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation } from 'react-router-dom';
 import axios from '../api/axiosConfig';
 import ToastMessage from './ToastMessage';
 import LoadingSpinner from './LoadingSpinner';
@@ -20,7 +20,6 @@ import LoadingSpinner from './LoadingSpinner';
 
 export default function UserSupportPanel({ openTicketIdFromQuery = null }) {
   const location = useLocation();
-  const navigate = useNavigate();
   const params = new URLSearchParams(location.search);
   const openTicketFromQuery = openTicketIdFromQuery || params.get('openTicket') || null;
 
