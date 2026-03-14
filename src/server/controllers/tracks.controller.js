@@ -461,7 +461,7 @@ exports.downloadTrack = async (req, res, next) => {
       }
     });
     return stream.pipe(res);
-  } catch (err) {
+  } catch (err) { 
     next(err);
   }
 };
