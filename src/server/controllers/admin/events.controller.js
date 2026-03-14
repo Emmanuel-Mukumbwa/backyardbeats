@@ -35,6 +35,13 @@ function makeAbsoluteUrl(relOrAbs, req) {
  */
 exports.pendingEvents = async (req, res, next) => {
   try {
+    const include = String(req.query.include || 'pending').toLowerCase();
+
+    let whereClause = `WHERE COALESCE(e.is_approved,0) = 0 AND COALESCE(e.is_rejected,0) = 0`;
+    if (include === 'all') whereClause = '';
+    else if (include === 'approved') whereClause = `WHERE COALESCE(e.is_approved,0) = 1`;
+    else if (include === 'rejected') whereClause = `WHERE COALESCE(e.is_rejected,0) = 1`;
+
     const [rows] = await pool.query(
       `SELECT e.id, e.title, e.description, e.event_date, e.artist_id,
               a.display_name AS artist_display_name,
@@ -52,7 +59,7 @@ exports.pendingEvents = async (req, res, next) => {
        LEFT JOIN artists a ON e.artist_id = a.id
        LEFT JOIN users u ON a.user_id = u.id
        LEFT JOIN districts d ON e.district_id = d.id
-       WHERE COALESCE(e.is_approved,0) = 0 AND COALESCE(e.is_rejected,0) = 0
+       ${whereClause}
        ORDER BY e.created_at DESC
        LIMIT 500`
     );
@@ -80,7 +87,6 @@ exports.pendingEvents = async (req, res, next) => {
         venue: r.venue,
         address: r.address,
         ticket_url: r.ticket_url,
-        // absolute URL for admin UI preview (uses req)
         image_url: makeAbsoluteUrl(rawImage, req),
         lat: r.lat,
         lng: r.lng,
@@ -185,6 +191,68 @@ exports.rejectEvent = async (req, res, next) => {
     );
 
     res.json({ success: true });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * POST /admin/pending/events/:id/undo
+ * Resets approval/rejection flags and clears metadata
+ */
+exports.undoEvent = async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    if (!id) return res.status(400).json({ error: 'Invalid event id' });
+
+    // Ensure event exists
+    const [existsRows] = await pool.query('SELECT id FROM events WHERE id = ? LIMIT 1', [id]);
+    if (!existsRows || existsRows.length === 0) {
+      return res.status(404).json({ error: 'Event not found' });
+    }
+
+    await pool.query(
+      `UPDATE events
+       SET is_approved = 0,
+           is_rejected = 0,
+           approved_at = NULL,
+           rejected_at = NULL,
+           approved_by = NULL,
+           rejected_by = NULL,
+           rejection_reason = NULL
+       WHERE id = ?`,
+      [id]
+    );
+
+    const [rows] = await pool.query(
+      `SELECT e.id, e.title, e.description, e.event_date, e.image_url, e.district_id, e.venue, e.address, e.ticket_url, e.lat, e.lng, e.capacity, e.created_at
+       FROM events e
+       WHERE e.id = ? LIMIT 1`,
+      [id]
+    );
+
+    if (!rows || rows.length === 0) {
+      return res.status(404).json({ error: 'Event not found after undo' });
+    }
+
+    const rawImage = rows[0] ? buildPublicUrl(rows[0].image_url, 'eventImage') : null;
+    const ev = {
+      id: rows[0].id,
+      title: rows[0].title,
+      description: rows[0].description,
+      event_date: rows[0].event_date,
+      image_url: makeAbsoluteUrl(rawImage, req),
+      district_id: rows[0].district_id,
+      venue: rows[0].venue,
+      address: rows[0].address,
+      ticket_url: rows[0].ticket_url,
+      lat: rows[0].lat,
+      lng: rows[0].lng,
+      capacity: rows[0].capacity,
+      created_at: rows[0].created_at
+    };
+
+    res.json({ success: true, event: ev });
   } catch (err) {
     next(err);
   }
