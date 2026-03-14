@@ -1,6 +1,6 @@
 // src/pages/ArtistDetail.jsx
 import React, { useEffect, useState, useContext } from 'react';
-import { useParams, Link, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import axios from '../api/axiosConfig';
 import ArtistHeader from '../components/artist/ArtistHeader';
 import TracksPanel from '../components/artist/Tracks';
@@ -8,7 +8,7 @@ import EventsPanel from '../components/artist/Events';
 import RatingsPanel from '../components/artist/RatingsPanel';
 import ArtistSidebar from '../components/artist/ArtistSidebar';
 import { AuthContext } from '../context/AuthContext';
-import { Row, Col, Card, Button, Alert } from 'react-bootstrap';
+import { Row, Col, Card, Alert } from 'react-bootstrap';
 
 import ToastMessage from '../components/ToastMessage';
 import LoadingSpinner from '../components/LoadingSpinner';
@@ -44,7 +44,7 @@ export default function ArtistDetail() {
 
   const [following, setFollowing] = useState(null);
   const [processingFollow, setProcessingFollow] = useState(false);
-  const [ratingsKey, setRatingsKey] = useState(0);
+  const [setRatingsKey] = useState(0);
 
   // toast state
   const [toast, setToast] = useState({
