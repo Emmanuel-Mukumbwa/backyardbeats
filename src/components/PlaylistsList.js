@@ -1,6 +1,6 @@
 // src/components/PlaylistsList.jsx
 import React, { useEffect, useState } from 'react';
-import { Card, Button, Row, Col, Modal, Form, ListGroup, Spinner, Badge } from 'react-bootstrap';
+import { Card, Button, Row, Col, Modal, Form,  Spinner, Badge } from 'react-bootstrap';
 import axios from '../api/axiosConfig';
 import PlaylistView from './PlaylistView';
 
