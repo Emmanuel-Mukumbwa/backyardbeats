@@ -15,7 +15,6 @@ export default function EventsPanel({
 }) {
   const navigate = useNavigate();
   const [ticketsMap, setTicketsMap] = useState({});
-  const [loadingTicketsMap, setLoadingTicketsMap] = useState(false);
 
   // safe getter for district name - supports function or object map
   const getDistrictName = (districtId) => {
@@ -36,7 +35,6 @@ export default function EventsPanel({
   useEffect(() => {
     let mounted = true;
     async function loadUserTickets() {
-      setLoadingTicketsMap(true);
       try {
         const res = await axios.get('/support', { params: { limit: 200 } });
         if (!mounted) return;
@@ -56,8 +54,6 @@ export default function EventsPanel({
         setTicketsMap(map);
       } catch (e) {
         // ignore
-      } finally {
-        if (mounted) setLoadingTicketsMap(false);
       }
     }
     loadUserTickets();
