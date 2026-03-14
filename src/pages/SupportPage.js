@@ -1,6 +1,7 @@
+// src/pages/SupportPage.jsx
 import React, { useEffect, useState } from 'react';
 import {
-  Container, Form, Button, Alert, Row, Col, Spinner, ListGroup, Image, Badge, Nav
+  Container, Form, Button, Alert, Row, Col, Spinner, ListGroup, Image, Nav
 } from 'react-bootstrap';
 import { useLocation, useNavigate } from 'react-router-dom';
 import axios from '../api/axiosConfig';
