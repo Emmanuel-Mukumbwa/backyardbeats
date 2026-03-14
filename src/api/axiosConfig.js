@@ -2,10 +2,10 @@
 import axios from 'axios';
 
 const instance = axios.create({
-  baseURL: process.env.REACT_APP_API_URL || 'http://localhost:3001',
+  baseURL: process.env.REACT_APP_API_URL,
   withCredentials: true,
   timeout: 20000,
-});
+}); 
  
 function debugLog(...args) {
   if (process.env.NODE_ENV === 'development') {
