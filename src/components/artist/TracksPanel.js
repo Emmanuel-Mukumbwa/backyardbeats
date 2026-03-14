@@ -36,12 +36,10 @@ export default function TracksPanel({
 
   // tickets map: { 'track:123': ticket }
   const [ticketsMap, setTicketsMap] = useState({});
-  const [loadingTicketsMap, setLoadingTicketsMap] = useState(false);
 
   useEffect(() => {
     let mounted = true;
     async function loadUserTickets() {
-      setLoadingTicketsMap(true);
       try {
         // fetch user's tickets and create a map keyed by target_type:target_id
         const res = await axios.get('/support', { params: { limit: 200 } });
@@ -64,8 +62,6 @@ export default function TracksPanel({
       } catch (e) {
         // fail silently - ticketsMap can remain empty
         // console.warn('Failed load tickets for TracksPanel', e);
-      } finally {
-        if (mounted) setLoadingTicketsMap(false);
       }
     }
     loadUserTickets();
