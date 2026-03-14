@@ -32,6 +32,13 @@ function makeAbsoluteUrl(relOrAbs, req) {
  */
 exports.pendingTracks = async (req, res, next) => {
   try {
+    const include = String(req.query.include || 'pending').toLowerCase();
+
+    let whereClause = `WHERE COALESCE(t.is_approved,0) = 0 AND COALESCE(t.is_rejected,0) = 0`;
+    if (include === 'all') whereClause = '';
+    else if (include === 'approved') whereClause = `WHERE COALESCE(t.is_approved,0) = 1`;
+    else if (include === 'rejected') whereClause = `WHERE COALESCE(t.is_rejected,0) = 1`;
+
     const [rows] = await pool.query(
       `SELECT t.id,
               t.title,
@@ -48,19 +55,18 @@ exports.pendingTracks = async (req, res, next) => {
               t.approved_at, t.rejected_at, t.rejection_reason
        FROM tracks t
        LEFT JOIN artists a ON t.artist_id = a.id
-       WHERE COALESCE(t.is_approved,0) = 0 AND COALESCE(t.is_rejected,0) = 0
+       ${whereClause}
        ORDER BY t.created_at DESC
        LIMIT 500`
     );
 
     const mapped = rows.map(r => {
-      const rawPreview = buildPublicUrl(r.previewUrl, 'trackFile'); // returns '/uploads/...' or path
-      const rawArtwork = buildPublicUrl(r.preview_artwork, 'trackArtwork'); // returns '/uploads/...' or path
+      const rawPreview = buildPublicUrl(r.previewUrl, 'trackFile');
+      const rawArtwork = buildPublicUrl(r.preview_artwork, 'trackArtwork');
 
       return {
         id: r.id,
         title: r.title,
-        // absolute URLs for frontend convenience:
         previewUrl: makeAbsoluteUrl(rawPreview, req),
         preview_artwork: makeAbsoluteUrl(rawArtwork, req),
         duration: r.duration,
@@ -153,6 +159,59 @@ exports.rejectTrack = async (req, res, next) => {
     );
 
     res.json({ success: true });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * POST /admin/pending/tracks/:id/undo
+ * Resets approval/rejection flags and clears metadata
+ */
+exports.undoTrack = async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    if (!id) return res.status(400).json({ error: 'Invalid track id' });
+
+    // Ensure track exists
+    const [existsRows] = await pool.query('SELECT id FROM tracks WHERE id = ? LIMIT 1', [id]);
+    if (!existsRows || existsRows.length === 0) {
+      return res.status(404).json({ error: 'Track not found' });
+    }
+
+    await pool.query(
+      `UPDATE tracks
+       SET is_approved = 0,
+           is_rejected = 0,
+           approved_at = NULL,
+           rejected_at = NULL,
+           approved_by = NULL,
+           rejected_by = NULL,
+           rejection_reason = NULL
+       WHERE id = ?`,
+      [id]
+    );
+
+    const [rows] = await pool.query('SELECT id, title, preview_url AS previewUrl, preview_artwork AS preview_artwork, duration, genre, release_date, created_at FROM tracks WHERE id = ? LIMIT 1', [id]);
+    if (!rows || rows.length === 0) {
+      return res.status(404).json({ error: 'Track not found after undo' });
+    }
+
+    const rawPreview = rows[0] ? buildPublicUrl(rows[0].previewUrl, 'trackFile') : null;
+    const rawArtwork = rows[0] ? buildPublicUrl(rows[0].preview_artwork, 'trackArtwork') : null;
+
+    const track = {
+      id: rows[0].id,
+      title: rows[0].title,
+      previewUrl: makeAbsoluteUrl(rawPreview, req),
+      preview_artwork: makeAbsoluteUrl(rawArtwork, req),
+      duration: rows[0].duration,
+      genre: rows[0].genre,
+      release_date: rows[0].release_date,
+      created_at: rows[0].created_at
+    };
+
+    res.json({ success: true, track });
   } catch (err) {
     next(err);
   }
