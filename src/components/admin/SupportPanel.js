@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Table, Button, Badge, Modal, Form, Spinner, Row, Col, InputGroup, FormControl, ListGroup } from 'react-bootstrap';
 import axios from '../../api/axiosConfig';
 import ToastMessage from '../ToastMessage';
@@ -19,11 +19,10 @@ export default function SupportPanel() {
   const fileInputRef = useRef(null);
 
   // toast
-  const [toast, setToast] = useState({ show:false, message:'', variant:'success' });
+  const [toast, setToast] = useState({ show: false, message: '', variant: 'success' });
 
-  useEffect(() => { fetchTickets(); }, [filterStatus]);
-
-  async function fetchTickets() {
+  // fetchTickets is used from effects and other handlers, so make it stable
+  const fetchTickets = useCallback(async () => {
     setLoading(true);
     try {
       // NOTE: assuming server routes mounted at /support -> admin path is /support/admin
@@ -31,9 +30,16 @@ export default function SupportPanel() {
       setTickets(res.data.tickets || []);
     } catch (err) {
       console.error('fetchTickets', err);
-      setToast({ show:true, message:'Failed to load tickets', variant:'danger' });
-    } finally { setLoading(false); }
-  }
+      setToast({ show: true, message: 'Failed to load tickets', variant: 'danger' });
+    } finally {
+      setLoading(false);
+    }
+  }, [filterStatus, searchQ]);
+
+  // call fetchTickets when filterStatus or searchQ changes (via fetchTickets deps)
+  useEffect(() => {
+    fetchTickets();
+  }, [fetchTickets]);
 
   async function openTicket(t) {
     try {
@@ -47,7 +53,7 @@ export default function SupportPanel() {
       setStatus((res.data.ticket && res.data.ticket.status) || '');
     } catch (err) {
       console.error('openTicket', err);
-      setToast({ show:true, message:'Failed to open ticket', variant:'danger' });
+      setToast({ show: true, message: 'Failed to open ticket', variant: 'danger' });
     }
   }
 
@@ -64,7 +70,7 @@ export default function SupportPanel() {
 
   async function sendReply() {
     if (!reply && files.length === 0) {
-      setToast({ show:true, message:'Reply text or attachment required', variant:'warning' });
+      setToast({ show: true, message: 'Reply text or attachment required', variant: 'warning' });
       return;
     }
     if (!selected) return;
@@ -80,10 +86,10 @@ export default function SupportPanel() {
       // re-open to refresh messages & attachments
       await openTicket(selected);
       await fetchTickets();
-      setToast({ show:true, message:'Reply sent', variant:'success' });
+      setToast({ show: true, message: 'Reply sent', variant: 'success' });
     } catch (err) {
       console.error('sendReply', err);
-      setToast({ show:true, message:'Failed to send reply', variant:'danger' });
+      setToast({ show: true, message: 'Failed to send reply', variant: 'danger' });
     } finally {
       setSending(false);
     }
@@ -97,10 +103,10 @@ export default function SupportPanel() {
       // optionally add a system message locally
       setMessages(prev => [...prev, { id: `sys-${Date.now()}`, sender_role: 'system', body: `Status changed to "${s}" by admin`, created_at: new Date().toISOString() }]);
       await fetchTickets();
-      setToast({ show:true, message:`Marked ${s}`, variant:'success' });
+      setToast({ show: true, message: `Marked ${s}`, variant: 'success' });
     } catch (err) {
       console.error('changeStatus', err);
-      setToast({ show:true, message:'Failed to change status', variant:'danger' });
+      setToast({ show: true, message: 'Failed to change status', variant: 'danger' });
     }
   }
 
@@ -253,7 +259,7 @@ export default function SupportPanel() {
         </Modal.Footer>
       </Modal>
 
-      <ToastMessage show={toast.show} onClose={() => setToast(s => ({...s, show:false}))} message={toast.message} variant={toast.variant} />
+      <ToastMessage show={toast.show} onClose={() => setToast(s => ({ ...s, show: false }))} message={toast.message} variant={toast.variant} />
     </div>
   );
 }
