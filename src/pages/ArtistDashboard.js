@@ -11,7 +11,7 @@ import {
   Image,
   Badge,
   Stack
-} from 'react-bootstrap';
+} from 'react-bootstrap'; 
 import { useNavigate } from 'react-router-dom';
 import axios from '../api/axiosConfig';
 import RatingsList from '../components/RatingsList';
