@@ -77,4 +77,4 @@ exports.getMyProfile = async (req, res) => {
     console.error("getMyProfile error:", err);
     return res.status(500).json({ error: "Failed to fetch profile" });
   }
-};
+}; 
