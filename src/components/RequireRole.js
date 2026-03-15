@@ -11,7 +11,7 @@ import { Navigate, useLocation, useNavigate } from "react-router-dom";
  *
  * Behavior:
  * - Shows Loading while AuthContext hydrates.
- * - If not authenticated, redirects to /login with redirectTo.
+ * - If not authenticated, redirects to /login with redirectTo. 
  * - If authenticated but role not allowed, shows Access Denied UI.
  */
 export default function RequireRole({ roles = [], children }) {
