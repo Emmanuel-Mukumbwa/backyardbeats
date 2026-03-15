@@ -1,10 +1,92 @@
 // src/pages/BrowseMusic.jsx
-import React, { useEffect, useState, useRef, useCallback } from 'react';
+import React, { useEffect, useState, useRef, useCallback, useContext } from 'react';
 import axios from '../api/axiosConfig';
 import FilterBar from '../components/FilterBar';
 import { Container, Row, Col, Button, Spinner, ListGroup, Image, Form, Collapse } from 'react-bootstrap';
 import { FaDownload, FaChevronLeft, FaMusic, FaFilter } from 'react-icons/fa';
 import { useNavigate } from 'react-router-dom';
+import { AuthContext } from '../context/AuthContext';
+
+/** sanitize file name for client (small helper) */
+function sanitizeFilename(s) {
+  if (!s) return '';
+  return String(s)
+    .replace(/["'<>:\\/|?*]+/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 190);
+}
+
+/** download helper (forces filename by creating File object) */
+async function downloadTrackById(trackId, setToast) {
+  try {
+    // use axios instance for auth header
+    const res = await axios.get(`/download/${trackId}`, { responseType: 'blob' });
+
+    const disposition = (res.headers && (res.headers['content-disposition'] || res.headers['Content-Disposition'])) || '';
+    let filename = null;
+    if (disposition) {
+      const fnStar = disposition.match(/filename\*\s*=\s*(?:UTF-8'')?([^;]+)/i);
+      if (fnStar && fnStar[1]) {
+        try { filename = decodeURIComponent(fnStar[1].replace(/['"]/g, '')); } catch (e) { filename = fnStar[1].replace(/['"]/g, ''); }
+      }
+      if (!filename) {
+        const quoted = disposition.match(/filename\s*=\s*"([^"]+)"/i);
+        if (quoted && quoted[1]) filename = quoted[1];
+      }
+      if (!filename) {
+        const unquoted = disposition.match(/filename\s*=\s*([^;]+)/i);
+        if (unquoted && unquoted[1]) filename = unquoted[1].replace(/['"]/g, '').trim();
+      }
+    }
+
+    if (!filename) {
+      const title = (res.headers && (res.headers['x-track-title'] || res.headers['X-Track-Title'])) || '';
+      const mime = (res.data && res.data.type) || '';
+      let ext = '.mp3';
+      if (mime.includes('mpeg')) ext = '.mp3';
+      else if (mime.includes('audio/mp4') || mime.includes('m4a')) ext = '.m4a';
+      else if (mime.includes('ogg')) ext = '.ogg';
+      else if (mime.includes('wav')) ext = '.wav';
+      else if (mime.includes('flac')) ext = '.flac';
+      filename = `${sanitizeFilename(title || `track-${trackId}`)}${ext}`;
+    }
+
+    filename = filename && sanitizeFilename(filename) ? filename : `track-${trackId}.mp3`;
+
+    const blob = res.data;
+    if ((blob.type || '').includes('application/json')) {
+      const txt = await blob.text();
+      throw new Error(txt);
+    }
+
+    let fileToSave;
+    try {
+      fileToSave = new File([blob], filename, { type: blob.type || 'application/octet-stream' });
+    } catch (e) {
+      fileToSave = blob;
+    }
+
+    if (window.navigator && window.navigator.msSaveOrOpenBlob) {
+      window.navigator.msSaveOrOpenBlob(fileToSave, filename);
+    } else {
+      const url = window.URL.createObjectURL(fileToSave);
+      const a = document.createElement('a');
+      a.href = url;
+      a.setAttribute('download', filename);
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    }
+    if (typeof setToast === 'function') setToast({ show: true, message: `Download started: ${filename}`, variant: 'success' });
+  } catch (err) {
+    if (typeof setToast === 'function') {
+      const message = (err && err.message) ? err.message : 'Download failed';
+      setToast({ show: true, message: `Download failed: ${message}`, variant: 'danger' });
+    }
+  }
+}
 
 export default function BrowseMusic() {
   const [filters, setFilters] = useState({ district: '', genre: '', mood: '', q: '' });
@@ -12,7 +94,7 @@ export default function BrowseMusic() {
   const [items, setItems] = useState([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
-  const [limit] = useState(12); // fixed page size (no "per page" control)
+  const [limit] = useState(12);
   const [loading, setLoading] = useState(false);
   const playingRef = useRef(null);
   const mounted = useRef(true);
@@ -21,19 +103,16 @@ export default function BrowseMusic() {
   const [showFilters, setShowFilters] = useState(false);
 
   const navigate = useNavigate();
+  const { user, artist: myArtist } = useContext(AuthContext);
 
-  // Fetch helper (doesn't capture changing state directly; depends on passed opts)
+  // Fetch helper
   const fetchTracks = useCallback(async (opts = {}) => {
     const p = opts.page ?? page;
     const lim = opts.limit ?? limit;
     const s = opts.sort ?? sort;
     const f = opts.filters ?? filters;
 
-    const params = {
-      page: p,
-      limit: lim,
-      sort: s
-    };
+    const params = { page: p, limit: lim, sort: s };
     if (f.q) params.q = f.q;
     if (f.genre) params.genre = f.genre;
     if (f.mood) params.mood = f.mood;
@@ -47,7 +126,6 @@ export default function BrowseMusic() {
       setItems(payload.items || []);
       setTotal(payload.total || 0);
       setPage(payload.page || p);
-      // limit remains fixed
     } catch (err) {
       console.error('Failed to load tracks', err);
       setItems([]);
@@ -57,14 +135,12 @@ export default function BrowseMusic() {
     }
   }, [page, limit, sort, filters]);
 
-  // initial load
   useEffect(() => {
     mounted.current = true;
     fetchTracks({ page: 1, limit, sort, filters });
     return () => { mounted.current = false; clearTimeout(debounceRef.current); };
   }, [fetchTracks, limit, sort, filters]);
 
-  // when filters or sort change, debounce then fetch (reset to page 1)
   useEffect(() => {
     clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {
@@ -74,7 +150,6 @@ export default function BrowseMusic() {
     return () => clearTimeout(debounceRef.current);
   }, [filters, sort, fetchTracks, limit]);
 
-  // when page changes
   useEffect(() => {
     fetchTracks({ page, limit, sort, filters });
   }, [page, limit, sort, filters, fetchTracks]);
@@ -94,6 +169,19 @@ export default function BrowseMusic() {
   function handleArtistClick(artistId) {
     if (!artistId) return;
     navigate(`/artist/${artistId}`);
+  }
+
+  async function recordListenIfNeeded(track) {
+    // only logged-in users record listens
+    if (!user || !user.id) return;
+    // if we have the current user's artist profile and it's the same as this track's artist, skip
+    if (myArtist && track.artist && Number(myArtist.id) === Number(track.artist.id)) return;
+    try {
+      await axios.post('/fan/listens', { track_id: track.id, artist_id: track.artist?.id || null });
+      // we purposely ignore the response (server will dedupe or ignore owner plays)
+    } catch (e) {
+      // ignore network errors silently
+    }
   }
 
   const totalPages = Math.max(1, Math.ceil((total || 0) / limit));
@@ -129,7 +217,6 @@ export default function BrowseMusic() {
             </div>
           </div>
 
-          {/* Collapsible filter area (includes Sort) */}
           <Collapse in={showFilters}>
             <div id="browse-filters" className="mt-3 p-3 bg-light rounded shadow-sm">
               <FilterBar filters={filters} setFilters={setFilters} />
@@ -176,7 +263,7 @@ export default function BrowseMusic() {
                 const artistName = t.artist?.display_name || t.artist?.displayName || '';
                 const artwork = t.artwork_url || null;
                 const preview = t.preview_url || null;
-                const download = t.download_url || t.preview_url || null;
+                const downloadUrl = `/download/${t.id}`; // use our download endpoint with client helper
                 return (
                   <ListGroup.Item key={t.id} className="py-3">
                     <div className="d-flex align-items-start">
@@ -212,22 +299,22 @@ export default function BrowseMusic() {
                             <audio
                               controls
                               preload="none"
+                              controlsList="nodownload"
                               style={{ width: 220, height: 28 }}
                               src={preview}
-                              onPlay={e => handlePlay(e.target)}
-                              onPause={e => handlePause(e.target)}
+                              onPlay={e => { handlePlay(e.target); recordListenIfNeeded(t); }}
+                              onPause={e => { handlePause(e.target); }}
                               onEnded={() => { if (playingRef.current) playingRef.current = null; }}
                             />
                           ) : (
                             <div className="small text-muted">No preview</div>
                           )}
 
-                          {download ? (
+                          {downloadUrl ? (
                             <Button
                               variant="link"
                               size="sm"
-                              href={download}
-                              download
+                              onClick={() => downloadTrackById(t.id, null)}
                               title={`Download ${t.title}`}
                               className="p-0"
                             >
