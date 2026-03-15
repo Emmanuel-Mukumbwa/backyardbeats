@@ -1,3 +1,4 @@
+//src/pages/TermsAndConditions.js
 import React, { useEffect, useState } from 'react';
 import { Container, Card, Spinner } from 'react-bootstrap';
 import axios from '../api/axiosConfig';
