@@ -1,11 +1,12 @@
 // src/components/artist/TracksPanel.js
 import React, { useRef, useState, useEffect, useContext } from 'react';
-import { Table, Button, Image, Badge } from 'react-bootstrap';
+import { Table, Button, Image, Badge, Spinner } from 'react-bootstrap';
 import { FaMusic, FaEdit, FaTrash, FaDownload } from 'react-icons/fa';
 import PropTypes from 'prop-types';
 import { useNavigate } from 'react-router-dom';
 import axios from '../../api/axiosConfig';
 import ConfirmModal from '../ConfirmModal';
+import ToastMessage from '../ToastMessage';
 import { AuthContext } from '../../context/AuthContext';
 
 /**
@@ -26,6 +27,10 @@ export default function TracksPanel({
   const navigate = useNavigate();
   const playingRef = useRef(null);
   const { user, artist: myArtist } = useContext(AuthContext);
+
+  // Toast and download state
+  const [toast, setToast] = useState({ show: false, message: '', variant: 'success' });
+  const [downloadingId, setDownloadingId] = useState(null);
 
   // Confirm modal state for deletes
   const [confirm, setConfirm] = useState({
@@ -100,12 +105,10 @@ export default function TracksPanel({
       try { onPlay(track); } catch (e) { /* don't block UI */ }
     }
 
-    // record listen (best-effort), but skip if current user is the artist owner
     if (user && user.id && track && track.id) {
       if (myArtist && track.artist && Number(myArtist.id) === Number(track.artist.id)) {
         // skip owner plays
       } else {
-        // fire-and-forget
         axios.post('/fan/listens', { track_id: track.id, artist_id: track.artist?.id || null }).catch(() => {});
       }
     }
@@ -135,7 +138,7 @@ export default function TracksPanel({
   /**
    * Download helper: uses /download/:id endpoint and tries to force filename
    */
-  async function downloadTrack(trackId) {
+  async function downloadTrack(trackId, setToastCb, setDownloadingCb) {
     try {
       const res = await axios.get(`/download/${trackId}`, {
         responseType: 'blob'
@@ -145,7 +148,6 @@ export default function TracksPanel({
       let filename = null;
 
       if (disposition) {
-        // filename*= (RFC5987)
         const fnStar = disposition.match(/filename\*\s*=\s*(?:UTF-8'')?([^;]+)/i);
         if (fnStar && fnStar[1]) {
           try { filename = decodeURIComponent(fnStar[1].replace(/['"]/g, '')); } catch (e) { filename = fnStar[1].replace(/['"]/g, ''); }
@@ -179,11 +181,11 @@ export default function TracksPanel({
         const txt = await blob.text();
         let parsed;
         try { parsed = JSON.parse(txt); } catch (e) { parsed = txt; }
-        alert(`Download failed: ${JSON.stringify(parsed)}`);
+        setToastCb({ show: true, message: `Download failed: ${JSON.stringify(parsed)}`, variant: 'danger' });
+        setDownloadingCb(null);
         return;
       }
 
-      // create File to encourage browsers to use the filename
       let fileToSave;
       try {
         fileToSave = new File([blob], filename, { type: blob.type || 'application/octet-stream' });
@@ -203,6 +205,8 @@ export default function TracksPanel({
         a.remove();
         window.URL.revokeObjectURL(url);
       }
+      setToastCb({ show: true, message: `Download started: ${filename}`, variant: 'success' });
+      setDownloadingCb(null);
     } catch (err) {
       let message = err.message || 'Download failed';
       try {
@@ -213,10 +217,17 @@ export default function TracksPanel({
             try { const parsed = JSON.parse(txt); message = parsed.error || JSON.stringify(parsed); } catch (_) { message = txt; }
           } else if (typeof data === 'object') { message = data.error || JSON.stringify(data); } else { message = String(data); }
         }
-      } catch (_) { /* ignore */ }
-      alert(`Download failed: ${message}`);
+      } catch (_) {}
+      setToastCb({ show: true, message: `Download failed: ${message}`, variant: 'danger' });
+      setDownloadingCb(null);
     }
   }
+
+  const handleDownload = (trackId) => {
+    setDownloadingId(trackId);
+    setToast({ show: true, message: 'Preparing your download...', variant: 'info' });
+    downloadTrack(trackId, setToast, setDownloadingId);
+  };
 
   /**
    * Open support page with prefilled appeal data for a track.
@@ -253,138 +264,149 @@ export default function TracksPanel({
   }
 
   return (
-    <div className="mt-3">
-      <Table striped hover responsive className="mb-3">
-        <thead>
-          <tr>
-            <th style={{ width: 80 }}>Artwork</th>
-            <th>Title & status</th>
-            <th style={{ width: 380 }}>Preview</th>
-            <th style={{ width: 100 }}>Duration</th>
-            <th style={{ width: 200 }}>Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          {tracks.map(track => {
-            const itemStatus = track.is_approved ? 'approved' : (track.is_rejected ? 'rejected' : 'pending');
-            const previewRaw = getPreviewRaw(track);
-            const previewUrl = previewRaw ? resolveToBackend(previewRaw) : null;
-            const artworkRaw = getArtworkRaw(track);
-            const artworkUrl = artworkRaw ? resolveToBackend(artworkRaw) : null;
-
-            // find ticket in map
-            const ticketKey = `track:${String(track.id)}`;
-            const ticket = ticketsMap[ticketKey];
-
-            return (
-              <tr key={track.id}>
-                <td className="align-middle">
-                  {artworkUrl ? (
-                    <Image
-                      src={artworkUrl}
-                      rounded
-                      style={{ width: 64, height: 64, objectFit: 'cover' }}
-                      alt={`${track.title || 'Track'} artwork`}
-                      onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(track.title || 'Track')}&background=ccc&color=333&size=128`; }}
-                    />
-                  ) : (
-                    <div style={{ width: 64, height: 64, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f1f3f5', color: '#6c757d', borderRadius: 6 }}>
-                      <FaMusic />
-                    </div>
-                  )}
-                </td>
-
-                <td className="align-middle">
-                  <div><strong className="text-truncate d-block" style={{ maxWidth: 280 }}>{track.title}</strong></div>
-                  <div>
-                    {itemStatus === 'approved' && <Badge bg="success" className="me-2">Approved</Badge>}
-                    {itemStatus === 'pending' && <Badge bg="warning" text="dark" className="me-2">Pending</Badge>}
-                    {itemStatus === 'rejected' && <Badge bg="danger" className="me-2">Rejected</Badge>}
-                    {status !== 'approved' && <small className="text-muted"> ● Visible only to you until profile is approved</small>}
-                  </div>
-                  {track.is_rejected && track.rejection_reason && (
-                    <div className="mt-1"><small className="text-danger">Reason: {track.rejection_reason}</small></div>
-                  )}
-
-                  <div className="mt-1">
-                    {track.is_rejected && ticket && (
-                      <Button size="sm" variant="outline-primary" onClick={() => handleViewTicket(ticket)}>View ticket</Button>
-                    )}
-                    {track.is_rejected && !ticket && (
-                      <Button size="sm" variant="link" onClick={() => openAppealForTrack(track)}>Contact support</Button>
-                    )}
-                  </div>
-                </td>
-
-                <td className="align-middle">
-                  {previewUrl ? (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <audio
-                        controls
-                        controlsList="nodownload"
-                        preload="none"
-                        style={{ width: 320, maxWidth: '100%' }}
-                        src={previewUrl}
-                        onPlay={(e) => handlePlay(e.target, track)}
-                        onPause={(e) => handlePause(e.target)}
-                        onEnded={() => handlePause(null)}
-                      />
-                      <div style={{ display: 'flex', alignItems: 'center' }}>
-                        <Button
-                          size="sm"
-                          variant="outline-secondary"
-                          onClick={() => downloadTrack(track.id)}
-                        >
-                          <FaDownload />
-                        </Button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="small text-muted">No preview available</div>
-                  )}
-                </td>
-
-                <td className="align-middle">{track.duration ? `${track.duration}s` : '-'}</td>
-
-                <td className="align-middle">
-                  <div className="d-flex gap-2">
-                    <Button size="sm" variant="outline-primary" onClick={() => onEdit(track)}>
-                      <FaEdit className="me-1" /> Edit
-                    </Button>
-
-                    {track.is_rejected && (
-                      <Button size="sm" variant="outline-warning" onClick={() => openAppealForTrack(track)}>
-                        Appeal
-                      </Button>
-                    )}
-
-                    <Button size="sm" variant="outline-danger" onClick={() => openDeleteConfirm(track.id)}>
-                      <FaTrash className="me-1" /> Delete
-                    </Button>
-                  </div>
-                </td>
-              </tr>
-            );
-          })}
-
-          {tracks.length === 0 && (
-            <tr>
-              <td colSpan={5} className="text-center text-muted">No tracks yet — add your first track.</td>
-            </tr>
-          )}
-        </tbody>
-      </Table>
-
-      <ConfirmModal
-        show={confirm.show}
-        onHide={closeConfirm}
-        title={confirm.title}
-        message={confirm.message}
-        onConfirm={handleConfirmDelete}
-        confirmText={confirm.confirmText}
-        variant={confirm.variant}
+    <>
+      <ToastMessage
+        show={toast.show}
+        onClose={() => setToast(s => ({ ...s, show: false }))}
+        message={toast.message}
+        variant={toast.variant}
+        delay={3500}
+        position="top-end"
       />
-    </div>
+      <div className="mt-3">
+        <Table striped hover responsive className="mb-3">
+          <thead>
+            <tr>
+              <th style={{ width: 80 }}>Artwork</th>
+              <th>Title & status</th>
+              <th style={{ width: 380 }}>Preview</th>
+              <th style={{ width: 100 }}>Duration</th>
+              <th style={{ width: 200 }}>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {tracks.map(track => {
+              const itemStatus = track.is_approved ? 'approved' : (track.is_rejected ? 'rejected' : 'pending');
+              const previewRaw = getPreviewRaw(track);
+              const previewUrl = previewRaw ? resolveToBackend(previewRaw) : null;
+              const artworkRaw = getArtworkRaw(track);
+              const artworkUrl = artworkRaw ? resolveToBackend(artworkRaw) : null;
+              const isDownloading = downloadingId === track.id;
+
+              const ticketKey = `track:${String(track.id)}`;
+              const ticket = ticketsMap[ticketKey];
+
+              return (
+                <tr key={track.id}>
+                  <td className="align-middle">
+                    {artworkUrl ? (
+                      <Image
+                        src={artworkUrl}
+                        rounded
+                        style={{ width: 64, height: 64, objectFit: 'cover' }}
+                        alt={`${track.title || 'Track'} artwork`}
+                        onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(track.title || 'Track')}&background=ccc&color=333&size=128`; }}
+                      />
+                    ) : (
+                      <div style={{ width: 64, height: 64, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f1f3f5', color: '#6c757d', borderRadius: 6 }}>
+                        <FaMusic />
+                      </div>
+                    )}
+                  </td>
+
+                  <td className="align-middle">
+                    <div><strong className="text-truncate d-block" style={{ maxWidth: 280 }}>{track.title}</strong></div>
+                    <div>
+                      {itemStatus === 'approved' && <Badge bg="success" className="me-2">Approved</Badge>}
+                      {itemStatus === 'pending' && <Badge bg="warning" text="dark" className="me-2">Pending</Badge>}
+                      {itemStatus === 'rejected' && <Badge bg="danger" className="me-2">Rejected</Badge>}
+                      {status !== 'approved' && <small className="text-muted"> ● Visible only to you until profile is approved</small>}
+                    </div>
+                    {track.is_rejected && track.rejection_reason && (
+                      <div className="mt-1"><small className="text-danger">Reason: {track.rejection_reason}</small></div>
+                    )}
+
+                    <div className="mt-1">
+                      {track.is_rejected && ticket && (
+                        <Button size="sm" variant="outline-primary" onClick={() => handleViewTicket(ticket)}>View ticket</Button>
+                      )}
+                      {track.is_rejected && !ticket && (
+                        <Button size="sm" variant="link" onClick={() => openAppealForTrack(track)}>Contact support</Button>
+                      )}
+                    </div>
+                  </td>
+
+                  <td className="align-middle">
+                    {previewUrl ? (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <audio
+                          controls
+                          controlsList="nodownload"
+                          preload="none"
+                          style={{ width: 320, maxWidth: '100%' }}
+                          src={previewUrl}
+                          onPlay={(e) => handlePlay(e.target, track)}
+                          onPause={(e) => handlePause(e.target)}
+                          onEnded={() => handlePause(null)}
+                        />
+                        <div style={{ display: 'flex', alignItems: 'center' }}>
+                          <Button
+                            size="sm"
+                            variant="outline-secondary"
+                            onClick={() => handleDownload(track.id)}
+                            disabled={isDownloading}
+                          >
+                            {isDownloading ? <Spinner animation="border" size="sm" /> : <FaDownload />}
+                          </Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="small text-muted">No preview available</div>
+                    )}
+                  </td>
+
+                  <td className="align-middle">{track.duration ? `${track.duration}s` : '-'}</td>
+
+                  <td className="align-middle">
+                    <div className="d-flex gap-2">
+                      <Button size="sm" variant="outline-primary" onClick={() => onEdit(track)}>
+                        <FaEdit className="me-1" /> Edit
+                      </Button>
+
+                      {track.is_rejected && (
+                        <Button size="sm" variant="outline-warning" onClick={() => openAppealForTrack(track)}>
+                          Appeal
+                        </Button>
+                      )}
+
+                      <Button size="sm" variant="outline-danger" onClick={() => openDeleteConfirm(track.id)}>
+                        <FaTrash className="me-1" /> Delete
+                      </Button>
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
+
+            {tracks.length === 0 && (
+              <tr>
+                <td colSpan={5} className="text-center text-muted">No tracks yet — add your first track.</td>
+              </tr>
+            )}
+          </tbody>
+        </Table>
+
+        <ConfirmModal
+          show={confirm.show}
+          onHide={closeConfirm}
+          title={confirm.title}
+          message={confirm.message}
+          onConfirm={handleConfirmDelete}
+          confirmText={confirm.confirmText}
+          variant={confirm.variant}
+        />
+      </div>
+    </>
   );
 }
 
