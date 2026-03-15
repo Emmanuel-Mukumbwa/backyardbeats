@@ -1,4 +1,4 @@
-// src/components/RecentlyUploaded.js
+// src/components/RecentlyUploaded.jsx
 import React, { useRef } from 'react';
 import { ListGroup, Image, Button } from 'react-bootstrap';
 import { FaDownload, FaPlus } from 'react-icons/fa';
@@ -6,6 +6,7 @@ import useTracks from '../hooks/useTracks';
 import LoadingSpinner from './LoadingSpinner';
 import ToastMessage from './ToastMessage';
 import axios from '../api/axiosConfig';
+import AddToPlaylistModal from './AddToPlaylistModal';
 
 /** resolve backend base for relative /uploads paths */
 function resolveToBackend(raw) {
@@ -19,11 +20,11 @@ function resolveToBackend(raw) {
 
 /** try find token in localStorage (same heuristic used elsewhere) */
 function getStoredToken() {
-  const keys = ['token', 'accessToken', 'authToken', 'auth', 'app_token'];
+  const keys = ['token', 'accessToken', 'authToken', 'auth', 'app_token', 'bb_token'];
   for (let k of keys) {
     const v = localStorage.getItem(k);
     if (!v) continue;
-    if (v.startsWith('eyJ') || v.split('.').length === 3) return v;
+    if (typeof v === 'string' && (v.startsWith('eyJ') || v.split('.').length === 3)) return v;
     if (v.startsWith('Bearer ')) return v.substring(7);
     try {
       const parsed = JSON.parse(v);
@@ -40,20 +41,62 @@ function getStoredToken() {
   return null;
 }
 
-/** download via axios (preserves interceptors) */
+/** sanitize file name for client */
+function sanitizeFilename(s) {
+  if (!s) return '';
+  return String(s)
+    .replace(/["'<>:\\/|?*]+/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 190);
+}
+
+/** improved download that forces filename by creating a File object */
 async function downloadTrackById(trackId, setToast) {
   try {
     const token = getStoredToken();
     const headers = {};
     if (token) headers.Authorization = token.startsWith('Bearer ') ? token : `Bearer ${token}`;
 
-    const res = await axios.get(`/tracks/${trackId}/download`, { responseType: 'blob', headers });
-    const disposition = res.headers && (res.headers['content-disposition'] || res.headers['Content-Disposition']);
-    let filename = 'track.mp3';
+    const res = await axios.get(`/download/${trackId}`, { responseType: 'blob', headers });
+
+    // extract filename from content-disposition
+    const disposition = (res.headers && (res.headers['content-disposition'] || res.headers['Content-Disposition'])) || '';
+    let filename = null;
+
     if (disposition) {
-      const m = disposition.match(/filename="(.+)"/);
-      if (m && m[1]) filename = m[1];
+      // filename*= (encoded)
+      const fnStar = disposition.match(/filename\*\s*=\s*(?:UTF-8'')?([^;]+)/i);
+      if (fnStar && fnStar[1]) {
+        try { filename = decodeURIComponent(fnStar[1].replace(/['"]/g, '')); } catch (e) { filename = fnStar[1].replace(/['"]/g, ''); }
+      }
+      if (!filename) {
+        const quoted = disposition.match(/filename\s*=\s*"([^"]+)"/i);
+        if (quoted && quoted[1]) filename = quoted[1];
+      }
+      if (!filename) {
+        const unquoted = disposition.match(/filename\s*=\s*([^;]+)/i);
+        if (unquoted && unquoted[1]) filename = unquoted[1].replace(/['"]/g, '').trim();
+      }
     }
+
+    // fallback to X-Track headers or trackId
+    if (!filename) {
+      const title = (res.headers && (res.headers['x-track-title'] || res.headers['X-Track-Title'])) || '';
+      const artist = (res.headers && (res.headers['x-track-artist'] || res.headers['X-Track-Artist'])) || '';
+      const mime = (res.data && res.data.type) || '';
+      let ext = '.mp3';
+      if (mime.includes('mpeg')) ext = '.mp3';
+      else if (mime.includes('audio/mp4') || mime.includes('m4a')) ext = '.m4a';
+      else if (mime.includes('ogg')) ext = '.ogg';
+      else if (mime.includes('wav')) ext = '.wav';
+      else if (mime.includes('flac')) ext = '.flac';
+      const base = sanitizeFilename(title || artist || `track-${trackId}`);
+      filename = `${base}${ext}`;
+    }
+
+    filename = filename && sanitizeFilename(filename) ? filename : `track-${trackId}.mp3`;
+
     const blob = res.data;
     if ((blob.type || '').includes('application/json')) {
       const txt = await blob.text();
@@ -62,15 +105,37 @@ async function downloadTrackById(trackId, setToast) {
       setToast({ show: true, message: `Download failed: ${JSON.stringify(parsed)}`, variant: 'danger' });
       return;
     }
-    const url = window.URL.createObjectURL(blob);
+
+    // Create a File from the Blob (forces filename in many browsers)
+    let fileToSave;
+    try {
+      // If the browser supports the File constructor, use it
+      fileToSave = new File([blob], filename, { type: blob.type || 'application/octet-stream' });
+    } catch (e) {
+      // Fallback: use the blob directly
+      fileToSave = blob;
+    }
+
+    // Edge / IE fallback
+    if (window.navigator && window.navigator.msSaveOrOpenBlob) {
+      window.navigator.msSaveOrOpenBlob(fileToSave, filename);
+      setToast({ show: true, message: `Download started: ${filename}`, variant: 'success' });
+      return;
+    }
+
+    // Create object URL and force-download via anchor
+    const url = window.URL.createObjectURL(fileToSave);
     const a = document.createElement('a');
     a.href = url;
-    a.download = filename;
+    // prefer using the download attribute (should work when using a File object)
+    a.setAttribute('download', filename);
+    // For browsers that ignore download on cross-origin, try to open new tab as fallback
     document.body.appendChild(a);
     a.click();
     a.remove();
     window.URL.revokeObjectURL(url);
-    setToast({ show: true, message: 'Download started', variant: 'success' });
+
+    setToast({ show: true, message: `Download started: ${filename}`, variant: 'success' });
   } catch (err) {
     let message = err.message;
     try {
@@ -94,6 +159,9 @@ export default function RecentlyUploaded({ limit = 12, onRecordPlay = null }) {
   const showToast = (opts) => setToast(prev => ({ ...prev, ...opts, show: true }));
   const closeToast = () => setToast(prev => ({ ...prev, show: false }));
 
+  const [showAddModal, setShowAddModal] = React.useState(false);
+  const [selectedTrackToAdd, setSelectedTrackToAdd] = React.useState(null);
+
   function handlePlay(audioEl, track) {
     if (playingRef.current && playingRef.current !== audioEl) {
       try { playingRef.current.pause(); } catch (e) { /* ignore */ }
@@ -105,16 +173,11 @@ export default function RecentlyUploaded({ limit = 12, onRecordPlay = null }) {
   }
   function handlePause(audioEl) { if (playingRef.current === audioEl) playingRef.current = null; }
 
-  async function handleAddToPlaylist(trackId) {
-    const pid = window.prompt('Enter playlist id to add to:');
-    if (!pid) return;
-    try {
-      await axios.post(`/fan/playlists/${pid}/tracks`, { track_id: trackId });
-      showToast({ message: 'Added to playlist', variant: 'success' });
-    } catch (err) {
-      console.error('Add to playlist failed', err);
-      showToast({ message: err?.response?.data?.error || 'Failed to add to playlist', variant: 'danger' });
-    }
+  function openAddModal(track) { setSelectedTrackToAdd(track); setShowAddModal(true); }
+
+  async function handleAddComplete(pid) {
+    showToast({ message: 'Added to playlist', variant: 'success' });
+    setShowAddModal(false);
   }
 
   if (loading) return <div className="text-center py-3"><LoadingSpinner /></div>;
@@ -158,7 +221,7 @@ export default function RecentlyUploaded({ limit = 12, onRecordPlay = null }) {
                       <FaDownload />
                     </Button>
 
-                    <Button size="sm" variant="outline-primary" onClick={() => handleAddToPlaylist(t.id)} title="Add to playlist">
+                    <Button size="sm" variant="outline-primary" onClick={() => openAddModal(t.id)} title="Add to playlist">
                       <FaPlus />
                     </Button>
                   </div>
@@ -168,6 +231,8 @@ export default function RecentlyUploaded({ limit = 12, onRecordPlay = null }) {
           );
         })}
       </ListGroup>
+
+      <AddToPlaylistModal show={showAddModal} onHide={() => setShowAddModal(false)} trackId={selectedTrackToAdd} onAdded={handleAddComplete} />
 
       <ToastMessage show={toast.show} onClose={closeToast} message={toast.message} variant={toast.variant} title={toast.title} position={toast.position} delay={toast.delay} />
     </div>
