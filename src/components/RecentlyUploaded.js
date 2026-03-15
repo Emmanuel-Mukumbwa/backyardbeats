@@ -1,6 +1,5 @@
-// src/components/RecentlyUploaded.jsx
-import React, { useRef } from 'react';
-import { ListGroup, Image, Button } from 'react-bootstrap';
+import React, { useRef, useState } from 'react';
+import { ListGroup, Image, Button, Spinner } from 'react-bootstrap';
 import { FaDownload, FaPlus } from 'react-icons/fa';
 import useTracks from '../hooks/useTracks';
 import LoadingSpinner from './LoadingSpinner';
@@ -12,7 +11,6 @@ import AddToPlaylistModal from './AddToPlaylistModal';
 function resolveToBackend(raw) {
   if (!raw) return '';
   if (/^https?:\/\//i.test(raw)) return raw;
-  // prefer axios baseURL if configured
   const base = (axios && axios.defaults && axios.defaults.baseURL) || process.env.REACT_APP_API_URL || 'http://localhost:5000';
   const rel = raw.startsWith('/') ? raw : `/${raw}`;
   return `${base.replace(/\/$/, '')}${rel}`;
@@ -52,7 +50,7 @@ function sanitizeFilename(s) {
 }
 
 /** improved download that forces filename by creating a File object */
-async function downloadTrackById(trackId, setToast) {
+async function downloadTrackById(trackId, setToast, setDownloadingId) {
   try {
     const token = getStoredToken();
     const headers = {};
@@ -60,12 +58,10 @@ async function downloadTrackById(trackId, setToast) {
 
     const res = await axios.get(`/download/${trackId}`, { responseType: 'blob', headers });
 
-    // extract filename from content-disposition
     const disposition = (res.headers && (res.headers['content-disposition'] || res.headers['Content-Disposition'])) || '';
     let filename = null;
 
     if (disposition) {
-      // filename*= (encoded)
       const fnStar = disposition.match(/filename\*\s*=\s*(?:UTF-8'')?([^;]+)/i);
       if (fnStar && fnStar[1]) {
         try { filename = decodeURIComponent(fnStar[1].replace(/['"]/g, '')); } catch (e) { filename = fnStar[1].replace(/['"]/g, ''); }
@@ -80,7 +76,6 @@ async function downloadTrackById(trackId, setToast) {
       }
     }
 
-    // fallback to X-Track headers or trackId
     if (!filename) {
       const title = (res.headers && (res.headers['x-track-title'] || res.headers['X-Track-Title'])) || '';
       const artist = (res.headers && (res.headers['x-track-artist'] || res.headers['X-Track-Artist'])) || '';
@@ -103,39 +98,35 @@ async function downloadTrackById(trackId, setToast) {
       let parsed;
       try { parsed = JSON.parse(txt); } catch (e) { parsed = txt; }
       setToast({ show: true, message: `Download failed: ${JSON.stringify(parsed)}`, variant: 'danger' });
+      if (setDownloadingId) setDownloadingId(null);
       return;
     }
 
-    // Create a File from the Blob (forces filename in many browsers)
     let fileToSave;
     try {
-      // If the browser supports the File constructor, use it
       fileToSave = new File([blob], filename, { type: blob.type || 'application/octet-stream' });
     } catch (e) {
-      // Fallback: use the blob directly
       fileToSave = blob;
     }
 
-    // Edge / IE fallback
     if (window.navigator && window.navigator.msSaveOrOpenBlob) {
       window.navigator.msSaveOrOpenBlob(fileToSave, filename);
       setToast({ show: true, message: `Download started: ${filename}`, variant: 'success' });
+      if (setDownloadingId) setDownloadingId(null);
       return;
     }
 
-    // Create object URL and force-download via anchor
     const url = window.URL.createObjectURL(fileToSave);
     const a = document.createElement('a');
     a.href = url;
-    // prefer using the download attribute (should work when using a File object)
     a.setAttribute('download', filename);
-    // For browsers that ignore download on cross-origin, try to open new tab as fallback
     document.body.appendChild(a);
     a.click();
     a.remove();
     window.URL.revokeObjectURL(url);
 
     setToast({ show: true, message: `Download started: ${filename}`, variant: 'success' });
+    if (setDownloadingId) setDownloadingId(null);
   } catch (err) {
     let message = err.message;
     try {
@@ -148,6 +139,7 @@ async function downloadTrackById(trackId, setToast) {
       }
     } catch (e2) { /* ignore */ }
     setToast({ show: true, message: `Download failed: ${message}`, variant: 'danger' });
+    if (setDownloadingId) setDownloadingId(null);
   }
 }
 
@@ -155,12 +147,13 @@ export default function RecentlyUploaded({ limit = 12, onRecordPlay = null }) {
   const { tracks, loading, error } = useTracks('/public/tracks/recent', { limit });
   const playingRef = useRef(null);
 
-  const [toast, setToast] = React.useState({ show: false, message: '', variant: 'success', title: null, position: 'top-end', delay: 4000 });
+  const [toast, setToast] = useState({ show: false, message: '', variant: 'success', title: null, position: 'top-end', delay: 4000 });
+  const [downloadingId, setDownloadingId] = useState(null);
   const showToast = (opts) => setToast(prev => ({ ...prev, ...opts, show: true }));
   const closeToast = () => setToast(prev => ({ ...prev, show: false }));
 
-  const [showAddModal, setShowAddModal] = React.useState(false);
-  const [selectedTrackToAdd, setSelectedTrackToAdd] = React.useState(null);
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [selectedTrackToAdd, setSelectedTrackToAdd] = useState(null);
 
   function handlePlay(audioEl, track) {
     if (playingRef.current && playingRef.current !== audioEl) {
@@ -173,12 +166,18 @@ export default function RecentlyUploaded({ limit = 12, onRecordPlay = null }) {
   }
   function handlePause(audioEl) { if (playingRef.current === audioEl) playingRef.current = null; }
 
-  function openAddModal(track) { setSelectedTrackToAdd(track); setShowAddModal(true); }
+  function openAddModal(trackId) { setSelectedTrackToAdd(trackId); setShowAddModal(true); }
 
   async function handleAddComplete(pid) {
     showToast({ message: 'Added to playlist', variant: 'success' });
     setShowAddModal(false);
   }
+
+  const handleDownload = (trackId) => {
+    setDownloadingId(trackId);
+    setToast({ show: true, message: 'Preparing your download...', variant: 'info' });
+    downloadTrackById(trackId, setToast, setDownloadingId);
+  };
 
   if (loading) return <div className="text-center py-3"><LoadingSpinner /></div>;
   if (error) return <div className="text-muted">Error loading recent uploads: {error}</div>;
@@ -190,6 +189,7 @@ export default function RecentlyUploaded({ limit = 12, onRecordPlay = null }) {
       <ListGroup className="mt-0">
         {tracks.slice(0, limit).map((t, i) => {
           const artwork = t.artwork_url ? resolveToBackend(t.artwork_url) : `https://ui-avatars.com/api/?name=${encodeURIComponent(t.title || 'Track')}&background=ddd&color=333`;
+          const isDownloading = downloadingId === t.id;
           return (
             <ListGroup.Item key={`${t.id}-${i}`}>
               <div className="d-flex align-items-center justify-content-between">
@@ -217,8 +217,14 @@ export default function RecentlyUploaded({ limit = 12, onRecordPlay = null }) {
                   <div className="small text-muted">{t.duration ? `${t.duration}s` : '-'}</div>
 
                   <div style={{ display: 'flex', gap: 8 }}>
-                    <Button size="sm" variant="outline-secondary" onClick={() => downloadTrackById(t.id, setToast)} title="Download">
-                      <FaDownload />
+                    <Button
+                      size="sm"
+                      variant="outline-secondary"
+                      onClick={() => handleDownload(t.id)}
+                      disabled={isDownloading}
+                      title="Download"
+                    >
+                      {isDownloading ? <Spinner animation="border" size="sm" /> : <FaDownload />}
                     </Button>
 
                     <Button size="sm" variant="outline-primary" onClick={() => openAddModal(t.id)} title="Add to playlist">
