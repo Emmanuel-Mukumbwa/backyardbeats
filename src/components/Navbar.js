@@ -1,5 +1,5 @@
 // src/components/Navbar.jsx
-import React, { useContext, useState } from 'react';
+import React, { useContext, useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Navbar as RBNavbar, Nav as RBNav, Container as RBContainer, NavDropdown, Image } from 'react-bootstrap';
 import { AuthContext } from '../context/AuthContext';
@@ -17,6 +17,9 @@ export default function Navbar() {
   const [processingLogout, setProcessingLogout] = useState(false);
   const [toast, setToast] = useState({ show: false, message: '', variant: 'success' });
   const [expanded, setExpanded] = useState(false);
+
+  // ref for detecting outside clicks
+  const navRef = useRef(null);
 
   async function handleConfirmLogout() {
     setProcessingLogout(true);
@@ -38,55 +41,74 @@ export default function Navbar() {
 
   const userDisplay = user?.displayName || user?.username || '';
 
+  // Close navbar when clicking outside it (on small screens when expanded)
+  useEffect(() => {
+    function handleDocClick(e) {
+      if (!expanded) return;
+      if (navRef.current && !navRef.current.contains(e.target)) {
+        setExpanded(false);
+      }
+    }
+
+    // use capture to catch clicks early (works well with React Router Link navigation)
+    document.addEventListener('click', handleDocClick, true);
+    return () => document.removeEventListener('click', handleDocClick, true);
+  }, [expanded]);
+
   return (
     <>
       <ToastMessage show={toast.show} onClose={() => setToast(s => ({ ...s, show: false }))} message={toast.message} variant={toast.variant} />
 
-      <RBNavbar bg="success" variant="dark" expand="lg" sticky="top" expanded={expanded} onToggle={setExpanded} className="shadow-soft">
-        <RBContainer>
-          <RBNavbar.Brand as={Link} to="/">BackyardBeats</RBNavbar.Brand>
-          <RBNavbar.Toggle aria-controls="navbar-nav" />
-          <RBNavbar.Collapse id="navbar-nav">
-            <RBNav className="ms-auto" onSelect={() => setExpanded(false)}>
-              <RBNav.Link as={Link} to="/"><FaHome className="me-1" />Home</RBNav.Link>
-              <RBNav.Link as={Link} to="/events"><FaCalendarAlt className="me-1" />Events</RBNav.Link>
+      {/* attach ref to a wrapper so we can detect outside clicks */}
+      <div ref={navRef}>
+        <RBNavbar bg="success" variant="dark" expand="lg" sticky="top" expanded={expanded} onToggle={setExpanded} className="shadow-soft">
+          <RBContainer>
+            <RBNavbar.Brand as={Link} to="/" onClick={() => setExpanded(false)}>BackyardBeats</RBNavbar.Brand>
+            <RBNavbar.Toggle aria-controls="navbar-nav" />
+            <RBNavbar.Collapse id="navbar-nav">
+              {/* onSelect removed (we handle clicks individually) */}
+              <RBNav className="ms-auto">
+                <RBNav.Link as={Link} to="/" onClick={() => setExpanded(false)}><FaHome className="me-1" />Home</RBNav.Link>
+                <RBNav.Link as={Link} to="/events" onClick={() => setExpanded(false)}><FaCalendarAlt className="me-1" />Events</RBNav.Link>
 
-              {/* NEW: Music / Browse link */}
-              <RBNav.Link as={Link} to="/music"><FaMusic className="me-1" />Music</RBNav.Link>
+                {/* NEW: Music / Browse link */}
+                <RBNav.Link as={Link} to="/music" onClick={() => setExpanded(false)}><FaMusic className="me-1" />Music</RBNav.Link>
 
-              {user?.role === 'admin' && (
-                <RBNav.Link as={Link} to="/admin"><FaTools className="me-1" />Admin</RBNav.Link>
-              )}
+                {user?.role === 'admin' && (
+                  <RBNav.Link as={Link} to="/admin" onClick={() => setExpanded(false)}><FaTools className="me-1" />Admin</RBNav.Link>
+                )}
 
-              {user?.role === 'artist' && (
-                <>
-                  <RBNav.Link as={Link} to="/artist/dashboard"><FaMusic className="me-1" />My Dashboard</RBNav.Link>
-                  {!user?.has_profile && (
-                    <RBNav.Link as={Link} to="/onboard">Onboard</RBNav.Link>
-                  )}
-                </>
-              )}
+                {user?.role === 'artist' && (
+                  <>
+                    <RBNav.Link as={Link} to="/artist/dashboard" onClick={() => setExpanded(false)}><FaMusic className="me-1" />My Dashboard</RBNav.Link>
+                    {!user?.has_profile && (
+                      <RBNav.Link as={Link} to="/onboard" onClick={() => setExpanded(false)}>Onboard</RBNav.Link>
+                    )}
+                  </>
+                )}
 
-              {user?.role === 'fan' && (
-                <RBNav.Link as={Link} to="/fan/dashboard">My Dashboard</RBNav.Link>
-              )}
+                {user?.role === 'fan' && (
+                  <RBNav.Link as={Link} to="/fan/dashboard" onClick={() => setExpanded(false)}>My Dashboard</RBNav.Link>
+                )}
 
-              {user ? (
-                <NavUserDropdown
-                  user={user}
-                  display={userDisplay}
-                  onLogout={() => setShowLogout(true)}
-                />
-              ) : (
-                <>
-                  <RBNav.Link as={Link} to="/login"><FaSignInAlt className="me-1" />Login</RBNav.Link>
-                  <RBNav.Link as={Link} to="/register"><FaUserPlus className="me-1" />Register</RBNav.Link>
-                </>
-              )}
-            </RBNav>
-          </RBNavbar.Collapse>
-        </RBContainer>
-      </RBNavbar>
+                {user ? (
+                  <NavUserDropdown
+                    user={user}
+                    display={userDisplay}
+                    onLogout={() => { setShowLogout(true); setExpanded(false); }}
+                    onCloseNav={() => setExpanded(false)}
+                  />
+                ) : (
+                  <>
+                    <RBNav.Link as={Link} to="/login" onClick={() => setExpanded(false)}><FaSignInAlt className="me-1" />Login</RBNav.Link>
+                    <RBNav.Link as={Link} to="/register" onClick={() => setExpanded(false)}><FaUserPlus className="me-1" />Register</RBNav.Link>
+                  </>
+                )}
+              </RBNav>
+            </RBNavbar.Collapse>
+          </RBContainer>
+        </RBNavbar>
+      </div>
 
       <LogoutConfirmModal
         show={showLogout}
@@ -99,9 +121,10 @@ export default function Navbar() {
   );
 }
 
-function NavUserDropdown({ user, display, onLogout }) {
+function NavUserDropdown({ user, display, onLogout, onCloseNav }) {
   const avatarUrl = user?.photo_url || user?.photo || null;
   const avatarSrc = avatarUrl && /^https?:\/\//i.test(avatarUrl) ? avatarUrl : (avatarUrl ? `${process.env.REACT_APP_API_URL?.replace(/\/$/, '') || ''}/${avatarUrl}` : null);
+
   return (
     <NavDropdown align="end" title={
       <span className="d-inline-flex align-items-center">
@@ -118,10 +141,10 @@ function NavUserDropdown({ user, display, onLogout }) {
         <span className="small">{display}</span>
       </span>
     } id="user-dropdown">
-      <NavDropdown.Item as={Link} to="/profile">Profile</NavDropdown.Item>
-      {user?.role === 'artist' && <NavDropdown.Item as={Link} to="/artist/dashboard">Dashboard</NavDropdown.Item>}
+      <NavDropdown.Item as={Link} to="/profile" onClick={() => onCloseNav?.()}>Profile</NavDropdown.Item>
+      {user?.role === 'artist' && <NavDropdown.Item as={Link} to="/artist/dashboard" onClick={() => onCloseNav?.()}>Dashboard</NavDropdown.Item>}
       <NavDropdown.Divider />
-      <NavDropdown.Item as="button" onClick={onLogout}>Logout</NavDropdown.Item>
+      <NavDropdown.Item as="button" onClick={() => { onCloseNav?.(); onLogout?.(); }}>Logout</NavDropdown.Item>
     </NavDropdown>
   );
 }
