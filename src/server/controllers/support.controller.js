@@ -1,16 +1,9 @@
+// src/server/controllers/support.controller.js
 const pool = require('../db').pool;
-const path = require('path');
-const fs = require('fs');
-const axios = require('axios'); // optional fallback
-const { UPLOAD_BASE } = require('../middleware/upload'); // optional
 
-// Ensure support uploads dir
-const SUPPORT_UPLOADS_DIR = path.join(__dirname, '..', 'uploads', 'support');
-if (!fs.existsSync(SUPPORT_UPLOADS_DIR)) fs.mkdirSync(SUPPORT_UPLOADS_DIR, { recursive: true });
-
-/**
- * Helpers
- */
+/** 
+ * Helpers 
+ */ 
 async function getTicketById(id) {
   const [rows] = await pool.query(`SELECT * FROM support_tickets WHERE id = ?`, [id]);
   return rows[0] || null;
@@ -33,7 +26,7 @@ async function getAttachmentsForTicket(ticketId) {
 }
 
 /**
- * Try to fetch a small snapshot for a polymorphic target (track/event/artist).
+ * Fetch a small snapshot for a polymorphic target (track/event/artist).
  * Returns an object { type, id, title, is_rejected, rejection_reason, extra } or null.
  */
 async function fetchTargetSnapshot(target_type, target_id) {
@@ -81,50 +74,8 @@ async function fetchTargetSnapshot(target_type, target_id) {
     }
   } catch (err) {
     console.warn('fetchTargetSnapshot failed', err && err.message);
-    return null;
   }
   return null;
-}
-
-/**
- * Utility: try to copy a local file path or reference a remote URL into support attachments.
- * Returns an object: { path, filename, mime, size, is_remote }.
- */
-async function copyRemoteOrLocalFileToSupport(srcUrl) {
-  if (!srcUrl) return null;
-
-  if (/^https?:\/\//i.test(srcUrl)) {
-    const filename = path.basename(srcUrl.split('?')[0]);
-    return { path: srcUrl, filename, mime: null, size: null, is_remote: 1 };
-  }
-
-  let srcPath = srcUrl;
-  if (srcPath.startsWith('/')) {
-    srcPath = path.join(__dirname, '..', srcPath);
-  } else if (!path.isAbsolute(srcPath)) {
-    srcPath = path.join(__dirname, '..', srcUrl);
-  }
-
-  try {
-    if (!fs.existsSync(srcPath)) {
-      const filename = path.basename(srcUrl.split('?')[0]);
-      return { path: srcUrl, filename, mime: null, size: null, is_remote: 1 };
-    }
-
-    const stat = fs.statSync(srcPath);
-    const ext = path.extname(srcPath) || '';
-    const basename = path.basename(srcPath, ext).replace(/\s+/g, '-').replace(/[^a-zA-Z0-9-_]/g, '');
-    const destName = `support-${Date.now()}-${basename}${ext}`;
-    const destPath = path.join(SUPPORT_UPLOADS_DIR, destName);
-    fs.copyFileSync(srcPath, destPath);
-
-    const webPath = `/uploads/support/${destName}`;
-    return { path: webPath, filename: destName, mime: null, size: stat.size, is_remote: 0 };
-  } catch (err) {
-    console.warn('copyRemoteOrLocalFileToSupport failed', err && err.message);
-    const filename = path.basename(srcUrl.split('?')[0]);
-    return { path: srcUrl, filename, mime: null, size: null, is_remote: 1 };
-  }
 }
 
 /**
@@ -160,9 +111,10 @@ async function createTicket(req, res) {
     const mq = `INSERT INTO support_messages (ticket_id, sender_user_id, sender_role, body) VALUES (?, ?, 'user', ?)`;
     await pool.query(mq, [ticketId, userId, body]);
 
-    // 1) Handle uploaded files from the client (req.files)
+    // 1) Handle uploaded files from the client (req.files) – now using Cloudinary URLs
     if (req.files && req.files.length) {
       for (const file of req.files) {
+        // file.path is the Cloudinary URL
         const ins = `INSERT INTO support_attachments (ticket_id, filename, path, mime, size) VALUES (?, ?, ?, ?, ?)`;
         await pool.query(ins, [ticketId, file.originalname, file.path, file.mimetype, file.size]);
       }
@@ -179,12 +131,12 @@ async function createTicket(req, res) {
     if (existingAttachments.length) {
       for (const url of existingAttachments) {
         if (!url) continue;
-        const filename = path.basename((url || '').split('?')[0]);
+        const filename = path.basename((url || '').split('?')[0]); // extract filename from URL
         await pool.query(`INSERT INTO support_attachments (ticket_id, filename, path, mime, size) VALUES (?, ?, ?, ?, ?)`, [ticketId, filename, url, null, null]);
       }
     }
 
-    // 3) If include_target_file flag present, try to copy/reference original file from the target
+    // 3) If include_target_file flag present, store the target's file URL(s) as attachments
     const includeTargetFile = req.body && (req.body.include_target_file === '1' || req.body.include_target_file === 'true' || req.body.include_target_file === 'on' || req.body.include_target_file === true);
     if (includeTargetFile && target_type && target_id) {
       try {
@@ -193,26 +145,20 @@ async function createTicket(req, res) {
           const track = rows && rows[0] ? rows[0] : null;
           if (track) {
             if (track.preview_url) {
-              const r = await copyRemoteOrLocalFileToSupport(track.preview_url);
-              if (r) {
-                await pool.query(`INSERT INTO support_attachments (ticket_id, filename, path, mime, size) VALUES (?, ?, ?, ?, ?)`, [ticketId, r.filename || path.basename(r.path || ''), r.path, r.mime || null, r.size || null]);
-              }
+              const filename = path.basename(track.preview_url.split('?')[0]);
+              await pool.query(`INSERT INTO support_attachments (ticket_id, filename, path, mime, size) VALUES (?, ?, ?, ?, ?)`, [ticketId, filename, track.preview_url, null, null]);
             }
             if (track.preview_artwork) {
-              const r2 = await copyRemoteOrLocalFileToSupport(track.preview_artwork);
-              if (r2) {
-                await pool.query(`INSERT INTO support_attachments (ticket_id, filename, path, mime, size) VALUES (?, ?, ?, ?, ?)`, [ticketId, r2.filename || path.basename(r2.path || ''), r2.path, r2.mime || null, r2.size || null]);
-              }
+              const filename = path.basename(track.preview_artwork.split('?')[0]);
+              await pool.query(`INSERT INTO support_attachments (ticket_id, filename, path, mime, size) VALUES (?, ?, ?, ?, ?)`, [ticketId, filename, track.preview_artwork, null, null]);
             }
           }
         } else if (target_type === 'event') {
           const [rows] = await pool.query(`SELECT image_url FROM events WHERE id = ? LIMIT 1`, [target_id]);
           const ev = rows && rows[0] ? rows[0] : null;
           if (ev && ev.image_url) {
-            const r = await copyRemoteOrLocalFileToSupport(ev.image_url);
-            if (r) {
-              await pool.query(`INSERT INTO support_attachments (ticket_id, filename, path, mime, size) VALUES (?, ?, ?, ?, ?)`, [ticketId, r.filename || path.basename(r.path || ''), r.path, r.mime || null, r.size || null]);
-            }
+            const filename = path.basename(ev.image_url.split('?')[0]);
+            await pool.query(`INSERT INTO support_attachments (ticket_id, filename, path, mime, size) VALUES (?, ?, ?, ?, ?)`, [ticketId, filename, ev.image_url, null, null]);
           }
         }
       } catch (err) {
@@ -312,7 +258,7 @@ async function postMessage(req, res) {
     const senderRole = req.user.role === 'admin' ? 'admin' : 'user';
     const [r] = await pool.query(`INSERT INTO support_messages (ticket_id, sender_user_id, sender_role, body) VALUES (?, ?, ?, ?)`, [ticketId, userId, senderRole, body]);
 
-    // attachments (req.files from multer)
+    // attachments (req.files from multer) – Cloudinary URLs
     if (req.files && req.files.length) {
       for (const file of req.files) {
         await pool.query(
@@ -333,7 +279,7 @@ async function postMessage(req, res) {
   }
 }
 
-/* ----------------- ADMIN METHODS (unchanged) ------------------ */
+/* ----------------- ADMIN METHODS ------------------ */
 
 async function adminListTickets(req, res) {
   try {
@@ -550,23 +496,12 @@ async function adminDeleteTicket(req, res) {
     if (req.user.role !== 'admin') return res.status(403).json({ error: 'Forbidden' });
 
     const id = req.params.id;
-    const [atts] = await pool.query(`SELECT * FROM support_attachments WHERE ticket_id = ?`, [id]);
-    if (atts && atts.length) {
-      for (const a of atts) {
-        try {
-          if (a.path && fs.existsSync(a.path)) {
-            fs.unlinkSync(a.path);
-          }
-        } catch (e) {
-          console.warn('Failed remove attachment file', a.path, e && e.message);
-        }
-      }
-    }
-
+    // Delete attachments records (Cloudinary files are not automatically deleted)
     await pool.query(`DELETE FROM support_attachments WHERE ticket_id = ?`, [id]);
     await pool.query(`DELETE FROM support_messages WHERE ticket_id = ?`, [id]);
     await pool.query(`DELETE FROM support_tickets WHERE id = ?`, [id]);
 
+    // Optionally: you could delete the files from Cloudinary using their API, but that's extra.
     res.json({ ok: true });
   } catch (err) {
     console.error('adminDeleteTicket error', err);
