@@ -1,4 +1,3 @@
-//src/server/routes/tracks.routes.js
 const express = require('express');
 const router = express.Router();
 const auth = require('../middleware/auth.middleware');
@@ -12,9 +11,16 @@ router.use(auth);
 // fields: 'file' (audio) and 'artwork' (image)
 const fields = uploadFields([{ name: 'file', maxCount: 1 }, { name: 'artwork', maxCount: 1 }]);
 
-router.get('/', controller.listTracks);           // returns tracks for the logged-in artist
-router.post('/', fields, controller.createTrack);
+router.get('/', controller.listTracks); // returns tracks for the logged-in artist
+
+// Debug middleware to log incoming fields before Multer processes them
+router.post('/', (req, res, next) => {
+  console.log('Fields received (body keys):', Object.keys(req.body));
+  console.log('Files received (pre-Multer):', req.files);
+  next();
+}, fields, controller.createTrack);
+
 router.put('/:id', fields, controller.updateTrack);
 router.delete('/:id', controller.deleteTrack);
 
-module.exports = router; 
+module.exports = router;
