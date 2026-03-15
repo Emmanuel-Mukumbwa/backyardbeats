@@ -342,6 +342,6 @@ export default function BrowseMusic() {
           </div>
         </Col>
       </Row>
-    </Container>
+    </Container> 
   );
 }
