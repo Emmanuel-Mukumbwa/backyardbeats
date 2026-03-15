@@ -219,7 +219,7 @@ export default function EventsPanel({
   );
 }
 
-EventsPanel.propTypes = {
+EventsPanel.propTypes = { 
   events: PropTypes.array,
   onEdit: PropTypes.func.isRequired,
   onDelete: PropTypes.func.isRequired,
