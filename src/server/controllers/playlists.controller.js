@@ -7,7 +7,7 @@ const pool = require('../db').pool;
  * All endpoints require authentication and enforce user ownership.
  * Admins can pass ?include_unapproved=1 to bypass unapproved/rejected/banned filtering for moderation.
  */
-
+ 
 function isAdminIncludeUnapproved(req) {
   return !!(req.user && req.user.role === 'admin' && req.query.include_unapproved === '1');
 }
