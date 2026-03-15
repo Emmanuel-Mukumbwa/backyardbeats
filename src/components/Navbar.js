@@ -125,6 +125,11 @@ function NavUserDropdown({ user, display, onLogout, onCloseNav }) {
   const avatarUrl = user?.photo_url || user?.photo || null;
   const avatarSrc = avatarUrl && /^https?:\/\//i.test(avatarUrl) ? avatarUrl : (avatarUrl ? `${process.env.REACT_APP_API_URL?.replace(/\/$/, '') || ''}/${avatarUrl}` : null);
 
+  // dynamic profile path: artists go to their artist detail page, others go to /profile
+  const profilePath = user?.role === 'artist'
+    ? `/artist/${user.artist_id || user.id}`
+    : '/profile';
+
   return (
     <NavDropdown align="end" title={
       <span className="d-inline-flex align-items-center">
@@ -141,7 +146,7 @@ function NavUserDropdown({ user, display, onLogout, onCloseNav }) {
         <span className="small">{display}</span>
       </span>
     } id="user-dropdown">
-      <NavDropdown.Item as={Link} to="/profile" onClick={() => onCloseNav?.()}>Profile</NavDropdown.Item>
+      <NavDropdown.Item as={Link} to={profilePath} onClick={() => onCloseNav?.()}>Profile</NavDropdown.Item>
       {user?.role === 'artist' && <NavDropdown.Item as={Link} to="/artist/dashboard" onClick={() => onCloseNav?.()}>Dashboard</NavDropdown.Item>}
       <NavDropdown.Divider />
       <NavDropdown.Item as="button" onClick={() => { onCloseNav?.(); onLogout?.(); }}>Logout</NavDropdown.Item>
