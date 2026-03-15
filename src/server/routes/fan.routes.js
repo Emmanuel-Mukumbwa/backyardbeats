@@ -7,7 +7,7 @@ const auth = require('../middleware/auth.middleware');
 router.use(auth);
 
 // POST /fan/listens  -> record listen
-router.post('/listens', listensController.recordListen);
+router.post('/listens', listensController.recordListen); 
 
 // GET  /fan/listens  -> recent listens for logged-in user
 router.get('/listens', listensController.getUserListens);
