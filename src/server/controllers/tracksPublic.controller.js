@@ -1,41 +1,5 @@
+// src/server/controllers/tracksPublic.controller.js
 const pool = require('../db').pool;
-const path = require('path');
-
-const UPLOADS_PREFIX = process.env.UPLOADS_PREFIX || '/uploads';
-
-/**
- * Helper: turn stored DB value into a public path under /uploads (or return absolute URL if already absolute)
- */
-function buildPublicUrl(value, type = 'generic') {
-  if (!value) return null;
-  if (typeof value !== 'string') return null;
-  const v = value.trim();
-  if (!v) return null;
-  if (v.startsWith('http://') || v.startsWith('https://')) return v;
-  if (v.startsWith(UPLOADS_PREFIX) || v.startsWith('/uploads')) return v;
-  if (v.includes('/')) {
-    // Already a relative path like 'tracks/artwork/img.jpg' or 'artists/photos/img.jpg'
-    return path.posix.join(UPLOADS_PREFIX, v);
-  }
-  // fallback by type
-  if (type === 'trackArtwork') return path.posix.join(UPLOADS_PREFIX, 'tracks', 'artwork', v);
-  if (type === 'trackFile') return path.posix.join(UPLOADS_PREFIX, 'tracks', v);
-  if (type === 'artist') return path.posix.join(UPLOADS_PREFIX, 'artists', 'photos', v);
-  if (type === 'eventImage') return path.posix.join(UPLOADS_PREFIX, 'events', 'images', v);
-  return path.posix.join(UPLOADS_PREFIX, v);
-}
-
-/**
- * Convert /uploads/relative (or relative) to absolute URL using request host/protocol
- */
-function makeAbsoluteUrl(relOrAbs, req) {
-  if (!relOrAbs) return null;
-  if (/^https?:\/\//i.test(relOrAbs)) return relOrAbs;
-  // ensure leading slash
-  const rel = relOrAbs.startsWith('/') ? relOrAbs : `/${relOrAbs}`;
-  const base = `${req.protocol}://${req.get('host')}`.replace(/\/$/, '');
-  return `${base}${rel}`;
-}
 
 /**
  * Helper to run count + items for pagination
@@ -97,24 +61,20 @@ exports.getNewReleases = async (req, res, next) => {
 
     const { total, rows } = await runPaginated(countSql, itemsSql, [], page, limit);
 
-    const items = (rows || []).map(r => {
-      const rawPreview = buildPublicUrl(r.preview_url, 'trackFile');
-      const rawArtwork = buildPublicUrl(r.preview_artwork, 'trackArtwork');
-      return {
-        id: r.id,
-        title: r.title,
-        preview_url: makeAbsoluteUrl(rawPreview, req),
-        artwork_url: makeAbsoluteUrl(rawArtwork, req),
-        duration: r.duration,
-        genre: r.genre,
-        release_date: r.release_date ? (new Date(r.release_date).toISOString().slice(0,10)) : null,
-        created_at: r.created_at ? new Date(r.created_at).toISOString() : null,
-        artist: {
-          id: r.artist_id,
-          display_name: r.artist_name
-        }
-      };
-    });
+    const items = (rows || []).map(r => ({
+      id: r.id,
+      title: r.title,
+      preview_url: r.preview_url,          // already full Cloudinary URL
+      artwork_url: r.preview_artwork,      // already full Cloudinary URL
+      duration: r.duration,
+      genre: r.genre,
+      release_date: r.release_date ? (new Date(r.release_date).toISOString().slice(0,10)) : null,
+      created_at: r.created_at ? new Date(r.created_at).toISOString() : null,
+      artist: {
+        id: r.artist_id,
+        display_name: r.artist_name
+      }
+    }));
 
     res.json({ items, total, page, limit });
   } catch (err) {
@@ -175,26 +135,22 @@ exports.getMostPlayed = async (req, res, next) => {
 
     const { total, rows } = await runPaginated(countSql, itemsSql, [], page, limit);
 
-    const items = (rows || []).map(r => {
-      const rawPreview = buildPublicUrl(r.preview_url, 'trackFile');
-      const rawArtwork = buildPublicUrl(r.preview_artwork, 'trackArtwork');
-      return {
-        id: r.id,
-        title: r.title,
-        preview_url: makeAbsoluteUrl(rawPreview, req),
-        download_url: makeAbsoluteUrl(rawPreview, req), // same file can be used for download
-        artwork_url: makeAbsoluteUrl(rawArtwork, req),
-        duration: r.duration,
-        genre: r.genre,
-        release_date: r.release_date ? (new Date(r.release_date).toISOString().slice(0,10)) : null,
-        created_at: r.created_at ? new Date(r.created_at).toISOString() : null,
-        plays: Number(r.plays || 0),
-        artist: {
-          id: r.artist_id,
-          display_name: r.artist_name
-        }
-      };
-    });
+    const items = (rows || []).map(r => ({
+      id: r.id,
+      title: r.title,
+      preview_url: r.preview_url,
+      download_url: r.preview_url, // same file can be used for download
+      artwork_url: r.preview_artwork,
+      duration: r.duration,
+      genre: r.genre,
+      release_date: r.release_date ? (new Date(r.release_date).toISOString().slice(0,10)) : null,
+      created_at: r.created_at ? new Date(r.created_at).toISOString() : null,
+      plays: Number(r.plays || 0),
+      artist: {
+        id: r.artist_id,
+        display_name: r.artist_name
+      }
+    }));
 
     res.json({ items, total, page, limit });
   } catch (err) {
@@ -204,7 +160,6 @@ exports.getMostPlayed = async (req, res, next) => {
 
 // Backwards-compatible alias: /public/tracks/recent should behave like new-releases
 exports.getRecentTracks = exports.getNewReleases;
-
 
 /**
  * GET /public/tracks
@@ -260,7 +215,7 @@ exports.getTracks = async (req, res, next) => {
       params.push(did);
     }
 
-    // For genre: prefer to filter by artist_genres/genres existence if genre provided
+    // For genre: filter by artist_genres/genres existence if genre provided
     if (req.query.genre) {
       whereClauses.push(`EXISTS (
         SELECT 1 FROM artist_genres ag2
@@ -317,26 +272,22 @@ exports.getTracks = async (req, res, next) => {
 
       const { total, rows } = await runPaginated(countSql, itemsSql, params, page, limit);
 
-      const items = (rows || []).map(r => {
-        const rawPreview = buildPublicUrl(r.preview_url, 'trackFile');
-        const rawArtwork = buildPublicUrl(r.preview_artwork, 'trackArtwork');
-        return {
-          id: r.id,
-          title: r.title,
-          preview_url: makeAbsoluteUrl(rawPreview, req),
-          download_url: makeAbsoluteUrl(rawPreview, req),
-          artwork_url: makeAbsoluteUrl(rawArtwork, req),
-          duration: r.duration,
-          genre: r.genre,
-          release_date: r.release_date ? (new Date(r.release_date).toISOString().slice(0,10)) : null,
-          created_at: r.created_at ? new Date(r.created_at).toISOString() : null,
-          plays: Number(r.plays || 0),
-          artist: {
-            id: r.artist_id,
-            display_name: r.artist_name
-          }
-        };
-      });
+      const items = (rows || []).map(r => ({
+        id: r.id,
+        title: r.title,
+        preview_url: r.preview_url,
+        download_url: r.preview_url,
+        artwork_url: r.preview_artwork,
+        duration: r.duration,
+        genre: r.genre,
+        release_date: r.release_date ? (new Date(r.release_date).toISOString().slice(0,10)) : null,
+        created_at: r.created_at ? new Date(r.created_at).toISOString() : null,
+        plays: Number(r.plays || 0),
+        artist: {
+          id: r.artist_id,
+          display_name: r.artist_name
+        }
+      }));
 
       return res.json({ items, total, page, limit, sort });
     }
@@ -372,27 +323,23 @@ exports.getTracks = async (req, res, next) => {
 
     const { total, rows } = await runPaginated(countSql, itemsSql, params, page, limit);
 
-    const items = (rows || []).map(r => {
-      const rawPreview = buildPublicUrl(r.preview_url, 'trackFile');
-      const rawArtwork = buildPublicUrl(r.preview_artwork, 'trackArtwork');
-      return {
-        id: r.id,
-        title: r.title,
-        preview_url: makeAbsoluteUrl(rawPreview, req),
-        artwork_url: makeAbsoluteUrl(rawArtwork, req),
-        duration: r.duration,
-        genre: r.genre,
-        release_date: r.release_date ? (new Date(r.release_date).toISOString().slice(0,10)) : null,
-        created_at: r.created_at ? new Date(r.created_at).toISOString() : null,
-        artist: {
-          id: r.artist_id,
-          display_name: r.artist_name
-        }
-      };
-    });
+    const items = (rows || []).map(r => ({
+      id: r.id,
+      title: r.title,
+      preview_url: r.preview_url,
+      artwork_url: r.preview_artwork,
+      duration: r.duration,
+      genre: r.genre,
+      release_date: r.release_date ? (new Date(r.release_date).toISOString().slice(0,10)) : null,
+      created_at: r.created_at ? new Date(r.created_at).toISOString() : null,
+      artist: {
+        id: r.artist_id,
+        display_name: r.artist_name
+      }
+    }));
 
     return res.json({ items, total, page, limit, sort: 'new' });
   } catch (err) {
     next(err);
-  }
-}; 
+  } 
+};
