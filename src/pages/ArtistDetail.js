@@ -9,7 +9,7 @@ import RatingsPanel from '../components/artist/RatingsPanel';
 import ArtistSidebar from '../components/artist/ArtistSidebar';
 import { AuthContext } from '../context/AuthContext';
 import { Row, Col, Card, Alert } from 'react-bootstrap';
-
+ 
 import ToastMessage from '../components/ToastMessage'; 
 import LoadingSpinner from '../components/LoadingSpinner';
 
