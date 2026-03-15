@@ -29,6 +29,7 @@ function getFolderForField(fieldname) {
 
 /**
  * Create a Cloudinary storage engine configured per‑field
+ * resource_type: 'auto' lets Cloudinary automatically detect the file type
  */
 const cloudinaryStorage = () => {
   return new CloudinaryStorage({
@@ -42,7 +43,7 @@ const cloudinaryStorage = () => {
       return {
         folder: folderPath,
         public_id: publicId,
-        resource_type: file.mimetype.startsWith('audio/') ? 'video' : 'image',
+        resource_type: 'auto', // Let Cloudinary figure out the type
       };
     },
   });
@@ -57,9 +58,7 @@ const imageUpload = multer({
   storage: cloudinaryStorage(),
   limits: { fileSize: 5 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
-    if (!file.mimetype || (!file.mimetype.startsWith('image/') && file.mimetype !== 'application/octet-stream')) {
-      return cb(new multer.MulterError('LIMIT_UNEXPECTED_FILE', 'Only image files are allowed'));
-    }
+    // Accept any file – Cloudinary will handle it
     cb(null, true);
   }
 }).single('image');
@@ -69,9 +68,6 @@ const eventImageUpload = multer({
   storage: cloudinaryStorage(),
   limits: { fileSize: 8 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
-    if (!file.mimetype || (!file.mimetype.startsWith('image/') && file.mimetype !== 'application/octet-stream')) {
-      return cb(new multer.MulterError('LIMIT_UNEXPECTED_FILE', 'Event image must be an image type'));
-    }
     cb(null, true);
   }
 }).single('image');
@@ -81,9 +77,6 @@ const audioUpload = multer({
   storage: cloudinaryStorage(),
   limits: { fileSize: 30 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
-    if (!file.mimetype || (!file.mimetype.startsWith('audio/') && file.mimetype !== 'application/octet-stream')) {
-      return cb(new multer.MulterError('LIMIT_UNEXPECTED_FILE', 'Only audio files are allowed'));
-    }
     cb(null, true);
   }
 }).single('file');
@@ -97,29 +90,7 @@ const routingUpload = multer({
   fileFilter: (req, file, cb) => {
     // Log every file received for debugging
     console.log(`Processing field: ${file.fieldname}, mimetype: ${file.mimetype}, originalname: ${file.originalname}`);
-
-    if (file.fieldname === 'file') {
-      // Accept audio/* OR application/octet-stream (common for audio files from phones)
-      if (!file.mimetype || (!file.mimetype.startsWith('audio/') && file.mimetype !== 'application/octet-stream')) {
-        console.error(`❌ Rejected file (field=${file.fieldname}) – not audio/octet-stream: ${file.mimetype}`);
-        return cb(new multer.MulterError('LIMIT_UNEXPECTED_FILE', `File must be an audio type or application/octet-stream, got ${file.mimetype}`));
-      }
-      if (file.mimetype === 'application/octet-stream') {
-        console.warn(`⚠️ Accepting file with generic mimetype (field=${file.fieldname}) – hoping it's audio: ${file.originalname}`);
-      }
-    } else if (['artwork', 'image', 'photo'].includes(file.fieldname)) {
-      // Accept image/* OR application/octet-stream (common for images from phones)
-      if (!file.mimetype || (!file.mimetype.startsWith('image/') && file.mimetype !== 'application/octet-stream')) {
-        console.error(`❌ Rejected file (field=${file.fieldname}) – not image/octet-stream: ${file.mimetype}`);
-        return cb(new multer.MulterError('LIMIT_UNEXPECTED_FILE', `Artwork must be an image type or application/octet-stream, got ${file.mimetype}`));
-      }
-      if (file.mimetype === 'application/octet-stream') {
-        console.warn(`⚠️ Accepting file with generic mimetype (field=${file.fieldname}) – hoping it's an image: ${file.originalname}`);
-      }
-    } else {
-      // Unexpected field name – log a warning but still accept
-      console.warn(`⚠️ Unexpected field name: ${file.fieldname} – accepting anyway`);
-    }
+    // Accept any file – Cloudinary will handle it
     cb(null, true);
   }
 });
