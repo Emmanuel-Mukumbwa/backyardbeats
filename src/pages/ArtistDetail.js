@@ -1,4 +1,3 @@
-// src/pages/ArtistDetail.jsx
 import React, { useEffect, useState, useContext } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import axios from '../api/axiosConfig';
@@ -152,89 +151,6 @@ export default function ArtistDetail() {
     return `${mm}:${String(ss).padStart(2, '0')}`;
   }
 
-  // token reuse helper
-  function getStoredToken() {
-    const keys = ['token', 'accessToken', 'authToken', 'auth', 'app_token'];
-    for (let k of keys) {
-      const v = localStorage.getItem(k);
-      if (!v) continue;
-      if (v.startsWith('eyJ') || v.split('.').length === 3) return v;
-      if (v.startsWith('Bearer ')) return v.substring(7);
-      try {
-        const parsed = JSON.parse(v);
-        if (parsed) {
-          if (parsed.token) return parsed.token;
-          if (parsed.accessToken) return parsed.accessToken;
-          if (parsed.authToken) return parsed.authToken;
-          const firstStr = Object.values(parsed).find(x => typeof x === 'string' && (x.startsWith('eyJ') || x.split?.('.').length === 3));
-          if (firstStr) return firstStr;
-        }
-      } catch (e) {}
-      return v;
-    }
-    return null;
-  }
-
-  async function downloadTrack(trackId) {
-    try {
-      const token = getStoredToken();
-      const headers = {};
-      if (token) headers.Authorization = token.startsWith('Bearer ') ? token : `Bearer ${token}`;
-
-      const res = await axios.get(`/tracks/${trackId}/download`, {
-        responseType: 'blob',
-        headers
-      });
-
-      const disposition = res.headers && (res.headers['content-disposition'] || res.headers['Content-Disposition']);
-      let filename = 'track.mp3';
-      if (disposition) {
-        const m = disposition.match(/filename="(.+)"/);
-        if (m && m[1]) filename = m[1];
-      }
-
-      const blob = res.data;
-      const blobType = blob.type || '';
-      if (blobType.includes('application/json')) {
-        const txt = await blob.text();
-        let parsed;
-        try { parsed = JSON.parse(txt); } catch { parsed = txt; }
-        showToast({ message: `Download failed: ${JSON.stringify(parsed)}`, variant: 'danger', title: 'Download' });
-        return;
-      }
-
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      window.URL.revokeObjectURL(url);
-
-      showToast({ message: 'Download started', variant: 'success' });
-    } catch (err) {
-      let message = err.message;
-      try {
-        if (err.response && err.response.data) {
-          const data = err.response.data;
-          if (data instanceof Blob) {
-            const txt = await data.text();
-            try {
-              const parsed = JSON.parse(txt);
-              message = parsed.error || JSON.stringify(parsed);
-            } catch (e) { message = txt; }
-          } else if (typeof data === 'object') {
-            message = data.error || JSON.stringify(data);
-          } else {
-            message = String(data);
-          }
-        }
-      } catch (e2) {}
-      showToast({ message: `Download failed: ${message}`, variant: 'danger', title: 'Download' });
-    }
-  }
-
   const resolveToBackend = resolveToBackendFactory(axios);
 
   // follow / unfollow with owner guard
@@ -361,7 +277,8 @@ export default function ArtistDetail() {
                   </div>
                 )}
 
-                <TracksPanel tracks={tracks} resolveToBackend={resolveToBackend} fmtDuration={fmtDuration} onDownload={downloadTrack} />
+                {/* Removed onDownload prop – TracksPanel handles its own downloads with correct route */}
+                <TracksPanel tracks={tracks} resolveToBackend={resolveToBackend} fmtDuration={fmtDuration} />
               </Card.Body>
             </Card>
 
