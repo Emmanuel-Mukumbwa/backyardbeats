@@ -1,4 +1,3 @@
-// src/context/AuthContext.js
 import React, { createContext, useState, useEffect, useCallback } from "react";
 import axios from '../api/axiosConfig';
 
@@ -25,7 +24,6 @@ function decodeJwtPayload(token) {
     const payload = JSON.parse(atob(parts[1]));
     return payload;
   } catch (e) {
-    // eslint-disable-next-line no-console
     console.warn('Failed to decode JWT payload', e);
     return null;
   }
@@ -39,7 +37,7 @@ function decodeJwtUserId(token) {
 
 function clearAuthStorage() {
   try {
-    SAFE_KEYS.forEach(k => localStorage.removeItem(k));
+    SAFE_KEYS.forEach(k => sessionStorage.removeItem(k));
   } catch (e) {
     // ignore
   }
@@ -80,30 +78,28 @@ export const AuthProvider = ({ children }) => {
 
   const saveAllStorages = (userData) => {
     try {
-      const token = userData.token || localStorage.getItem('bb_token') || localStorage.getItem('authToken') || null;
+      const token = userData.token || sessionStorage.getItem('bb_token') || sessionStorage.getItem('authToken') || null;
       const userObj = { ...userData };
       delete userObj.token;
 
-      if (token) localStorage.setItem('bb_token', token);
-      localStorage.setItem('bb_user', JSON.stringify({ ...userObj, token }));
-      localStorage.setItem('bb_auth', JSON.stringify({ token, user: userObj }));
+      if (token) sessionStorage.setItem('bb_token', token);
+      sessionStorage.setItem('bb_user', JSON.stringify({ ...userObj, token }));
+      sessionStorage.setItem('bb_auth', JSON.stringify({ token, user: userObj }));
 
-      if (token) localStorage.setItem('authToken', token);
-      if (userObj.role) localStorage.setItem('userRole', userObj.role);
+      if (token) sessionStorage.setItem('authToken', token);
+      if (userObj.role) sessionStorage.setItem('userRole', userObj.role);
       if (userObj.username || userObj.name || userObj.fullName) {
-        localStorage.setItem('userName', userObj.username || userObj.name || userObj.fullName);
+        sessionStorage.setItem('userName', userObj.username || userObj.name || userObj.fullName);
       }
-      if (userObj.userId || userObj.id) localStorage.setItem('userId', String(userObj.userId ?? userObj.id));
-      localStorage.setItem('isLoggedIn', 'true');
+      if (userObj.userId || userObj.id) sessionStorage.setItem('userId', String(userObj.userId ?? userObj.id));
+      sessionStorage.setItem('isLoggedIn', 'true');
 
       if (token) applyAxiosAuthHeader(token);
     } catch (e) {
-      // eslint-disable-next-line no-console
       console.error('Error saving auth to storage', e);
     }
   };
 
-  // Stabilize clearAllAuth so callbacks can depend on it safely
   const clearAllAuth = useCallback(() => {
     setUser(null);
     setArtist(null);
@@ -133,31 +129,30 @@ export const AuthProvider = ({ children }) => {
     const newUser = { ...(user || {}), ...updates };
     setUser(newUser);
     try {
-      const token = newUser.token || localStorage.getItem('bb_token') || localStorage.getItem('authToken');
+      const token = newUser.token || sessionStorage.getItem('bb_token') || sessionStorage.getItem('authToken');
       const userCopy = { ...newUser };
       delete userCopy.token;
 
-      localStorage.setItem('bb_user', JSON.stringify({ ...userCopy, token }));
+      sessionStorage.setItem('bb_user', JSON.stringify({ ...userCopy, token }));
 
-      const bbAuthRaw = localStorage.getItem('bb_auth');
+      const bbAuthRaw = sessionStorage.getItem('bb_auth');
       if (bbAuthRaw) {
         const parsed = safeParse(bbAuthRaw) || {};
         parsed.user = userCopy;
         parsed.token = token;
-        localStorage.setItem('bb_auth', JSON.stringify(parsed));
+        sessionStorage.setItem('bb_auth', JSON.stringify(parsed));
       }
 
-      if (userCopy.role) localStorage.setItem('userRole', userCopy.role);
+      if (userCopy.role) sessionStorage.setItem('userRole', userCopy.role);
       if (userCopy.username || userCopy.name || userCopy.fullName) {
-        localStorage.setItem('userName', userCopy.username || userCopy.name || userCopy.fullName);
+        sessionStorage.setItem('userName', userCopy.username || userCopy.name || userCopy.fullName);
       }
-      if (userCopy.userId || userCopy.id) localStorage.setItem('userId', String(userCopy.userId ?? userCopy.id));
+      if (userCopy.userId || userCopy.id) sessionStorage.setItem('userId', String(userCopy.userId ?? userCopy.id));
 
       if (userCopy.role === 'artist' || userCopy.has_profile === true) {
         fetchArtistProfile().catch(() => {});
       }
     } catch (e) {
-      // eslint-disable-next-line no-console
       console.error('Error updating user storage', e);
     }
   };
@@ -175,16 +170,16 @@ export const AuthProvider = ({ children }) => {
   const verifyAndHydrate = useCallback(async () => {
     setLoading(true);
     try {
-      let token = localStorage.getItem('bb_token') || null;
+      let token = sessionStorage.getItem('bb_token') || null;
       if (!token) {
-        const rawBbAuth = localStorage.getItem('bb_auth');
+        const rawBbAuth = sessionStorage.getItem('bb_auth');
         if (rawBbAuth) {
           const parsed = safeParse(rawBbAuth);
           if (parsed && parsed.token) token = parsed.token;
           else if (typeof rawBbAuth === 'string' && rawBbAuth.length > 0) token = rawBbAuth;
         }
       }
-      if (!token) token = localStorage.getItem('authToken') || null;
+      if (!token) token = sessionStorage.getItem('authToken') || null;
 
       if (!token) {
         clearAllAuth();
@@ -210,14 +205,14 @@ export const AuthProvider = ({ children }) => {
           setUser(composed);
 
           try {
-            localStorage.setItem('bb_token', token);
-            localStorage.setItem('authToken', token);
-            localStorage.setItem('bb_user', JSON.stringify({ ...remoteUser, token }));
-            localStorage.setItem('bb_auth', JSON.stringify({ token, user: remoteUser }));
-            if (remoteUser.role) localStorage.setItem('userRole', remoteUser.role);
-            if (remoteUser.username || remoteUser.name) localStorage.setItem('userName', remoteUser.username || remoteUser.name);
-            if (remoteUser.userId || remoteUser.id) localStorage.setItem('userId', String(remoteUser.userId ?? remoteUser.id));
-            localStorage.setItem('isLoggedIn', 'true');
+            sessionStorage.setItem('bb_token', token);
+            sessionStorage.setItem('authToken', token);
+            sessionStorage.setItem('bb_user', JSON.stringify({ ...remoteUser, token }));
+            sessionStorage.setItem('bb_auth', JSON.stringify({ token, user: remoteUser }));
+            if (remoteUser.role) sessionStorage.setItem('userRole', remoteUser.role);
+            if (remoteUser.username || remoteUser.name) sessionStorage.setItem('userName', remoteUser.username || remoteUser.name);
+            if (remoteUser.userId || remoteUser.id) sessionStorage.setItem('userId', String(remoteUser.userId ?? remoteUser.id));
+            sessionStorage.setItem('isLoggedIn', 'true');
           } catch (e) {
             // ignore storage errors
           }
@@ -252,7 +247,7 @@ export const AuthProvider = ({ children }) => {
     const onStorage = (e) => {
       if (!e.key) return;
       if (SAFE_KEYS.includes(e.key)) {
-        const hasToken = !!localStorage.getItem('bb_token') || !!localStorage.getItem('authToken');
+        const hasToken = !!sessionStorage.getItem('bb_token') || !!sessionStorage.getItem('authToken');
         if (!hasToken) {
           setUser(null);
           setArtist(null);
@@ -267,11 +262,10 @@ export const AuthProvider = ({ children }) => {
   }, [verifyAndHydrate]);
 
   useEffect(() => {
-    const token = user?.token || localStorage.getItem('bb_token') || localStorage.getItem('authToken') || null;
+    const token = user?.token || sessionStorage.getItem('bb_token') || sessionStorage.getItem('authToken') || null;
     applyAxiosAuthHeader(token);
   }, [user]);
 
-  // clarify mixed operators with parentheses
   const isAuthenticated = !!user;
   const isArtist = !!user && (user.role === 'artist' || (user.role === 'admin' && !!artist));
   const isAdmin = !!user && user.role === 'admin';
@@ -295,4 +289,4 @@ export const AuthProvider = ({ children }) => {
       {children}
     </AuthContext.Provider>
   );
-}; 
+};
