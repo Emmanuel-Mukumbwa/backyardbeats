@@ -211,10 +211,24 @@ exports.createEvent = async (req, res, next) => {
     if (userRow.deleted_at) return res.status(410).json({ status: 'deleted', message: 'Account deleted' });
     if (userRow.banned) return res.status(403).json({ status: 'banned', message: 'Account banned' });
 
-    const artist = await getArtistForUser(userId);
-    if (!artist) return res.status(400).json({ error: 'You must create an artist profile before creating events.' });
+    // Determine if this is an admin creating for another artist
+    const isAdmin = req.user.role === 'admin';
+    let artist;
 
-    const adminOverride = isAdminIncludeUnapproved(req);
+    if (isAdmin && req.body.artist_id) {
+      // Admin mode: use provided artist_id
+      const [artistRows] = await pool.query('SELECT * FROM artists WHERE id = ? LIMIT 1', [req.body.artist_id]);
+      if (!artistRows || artistRows.length === 0) {
+        return res.status(400).json({ error: 'Invalid artist_id' });
+      }
+      artist = artistRows[0];
+    } else {
+      // Normal flow: get artist from logged-in user
+      artist = await getArtistForUser(userId);
+      if (!artist) return res.status(400).json({ error: 'You must create an artist profile before creating events.' });
+    }
+
+    const adminOverride = isAdminIncludeUnapproved(req) || isAdmin; // admin always overrides
     if (!adminOverride) {
       if (artist.is_rejected) return res.status(403).json({ status: 'rejected', message: 'Artist profile rejected.' });
       if (!artist.is_approved) return res.status(403).json({ status: 'pending_verification', message: 'Artist profile pending verification.' });
@@ -259,6 +273,21 @@ exports.createEvent = async (req, res, next) => {
     if (lat !== null && colNames.includes('lat')) { fields.push('lat'); vals.push(lat); }
     if (lng !== null && colNames.includes('lng')) { fields.push('lng'); vals.push(lng); }
     if (capacity !== null && colNames.includes('capacity')) { fields.push('capacity'); vals.push(capacity); }
+
+    // For admin creations, mark as approved immediately
+    const isApproved = adminOverride ? 1 : 0;
+    if (colNames.includes('is_approved')) {
+      fields.push('is_approved');
+      vals.push(isApproved);
+    }
+    if (isApproved && colNames.includes('approved_at')) {
+      fields.push('approved_at');
+      vals.push(new Date());
+    }
+    if (isApproved && colNames.includes('approved_by')) {
+      fields.push('approved_by');
+      vals.push(userId);
+    }
 
     if (fields.length === 0) return res.status(500).json({ error: 'No writable columns found in events table' });
 
