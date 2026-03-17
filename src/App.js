@@ -2,7 +2,7 @@
 import React from 'react';
 import { Routes, Route } from 'react-router-dom';
 import Navbar from './components/Navbar';
-import Footer from './components/Footer';
+import Footer from './components/Footer'; 
 import Home from './pages/Home';
 import ArtistDetail from './pages/ArtistDetail';
 import Events from './pages/Events';
@@ -23,10 +23,12 @@ import PrivacyPolicy from './pages/PrivacyPolicy';
 import BrowseMusic from './pages/BrowseMusic';
 import PlaylistPage from './pages/PlaylistPage';
 import Profile from './pages/Profile';
+import IdleTimer from './components/IdleTimer';
 
 export default function App() {
   return ( 
     <AuthProvider>
+      <IdleTimer>
       <div className="d-flex flex-column min-vh-100">
         <Navbar />
         <main className="flex-fill container py-3">
@@ -105,6 +107,7 @@ export default function App() {
         </main>
         <Footer />
       </div>
+      </IdleTimer>
     </AuthProvider>
   );
 }
