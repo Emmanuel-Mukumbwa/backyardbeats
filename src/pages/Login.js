@@ -1,4 +1,3 @@
-// src/pages/Login.jsx
 import React, { useState, useContext, useEffect } from 'react';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { Form, Button, Card, InputGroup, Spinner } from 'react-bootstrap';
@@ -15,14 +14,12 @@ export default function Login() {
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
 
-  // field-specific validation state (used to highlight fields on server errors)
   const [fieldErrors, setFieldErrors] = useState({ identifier: false, password: false });
 
   const navigate = useNavigate();
   const location = useLocation();
   const { login } = useContext(AuthContext);
 
-  // Basic client-side validation
   const identifierTrim = identifier.trim();
   const isEmail = identifierTrim.includes('@');
   const emailValid = isEmail ? /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(identifierTrim) : true;
@@ -31,40 +28,37 @@ export default function Login() {
 
   const formValid = identifierValid && emailValid && passwordValid;
 
-  // Autofill email from query param (optional)
   useEffect(() => {
     const pre = new URLSearchParams(location.search).get('email');
     if (pre && pre.includes('@')) setIdentifier(pre);
   }, [location.search]);
 
-  // Clear field-level errors as user types
   useEffect(() => {
     if (identifierTrim.length > 0) {
       setFieldErrors(prev => (prev.identifier ? { ...prev, identifier: false } : prev));
     }
-  }, [identifierTrim, setFieldErrors]);
+  }, [identifierTrim]);
 
   useEffect(() => {
     if (password.length > 0) {
       setFieldErrors(prev => (prev.password ? { ...prev, password: false } : prev));
     }
-  }, [password, setFieldErrors]);
+  }, [password]);
 
-  // Persist to localStorage (always)
   const persistAuth = ({ token, user }) => {
     try {
       const payload = { token, user };
-      localStorage.setItem('bb_token', token);
-      localStorage.setItem('bb_user', JSON.stringify(user));
-      localStorage.setItem('bb_auth', JSON.stringify(payload));
+      sessionStorage.setItem('bb_token', token);
+      sessionStorage.setItem('bb_user', JSON.stringify(user));
+      sessionStorage.setItem('bb_auth', JSON.stringify(payload));
     } catch (e) {
       console.error('Error persisting auth to storage', e);
     }
   };
 
   const handleSubmit = async (e) => {
-    e?.preventDefault();
-    e?.stopPropagation();
+    e.preventDefault();
+    e.stopPropagation();
 
     setError(null);
     setSuccess(null);
@@ -91,7 +85,7 @@ export default function Login() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
-        credentials: 'include'
+        credentials: 'include',
       });
 
       const data = await res.json().catch(() => ({}));
@@ -111,7 +105,6 @@ export default function Login() {
         return;
       }
 
-      // Successful login
       const token = data?.token;
       const user = data?.user;
 
@@ -146,8 +139,25 @@ export default function Login() {
       setSuccess('Login successful — redirecting...');
       const NAV_DELAY_MS = 600;
 
+      // --- Redirect validation based on role ---
       const rawRedirect = new URLSearchParams(location.search).get('redirectTo');
-      const safeRedirect = (rawRedirect && rawRedirect.startsWith('/')) ? rawRedirect : null;
+      let safeRedirect = (rawRedirect && rawRedirect.startsWith('/')) ? rawRedirect : null;
+
+      if (safeRedirect) {
+        // Define allowed base paths for each role
+        const allowedBasePaths = {
+          admin: ['/admin'],
+          artist: ['/artist/dashboard', '/onboard'],
+          fan: ['/fan/dashboard'],
+        };
+
+        const userRole = user.role;
+        const allowed = allowedBasePaths[userRole] || [];
+        const isAllowed = allowed.some(prefix => safeRedirect.startsWith(prefix));
+        if (!isAllowed) {
+          safeRedirect = null; // ignore redirectTo if it's not allowed for this role
+        }
+      }
 
       setTimeout(() => {
         if (safeRedirect) {
@@ -155,9 +165,9 @@ export default function Login() {
           return;
         }
 
+        // Fallback to role-based dashboard
         if (user.role === 'artist') {
-          const hasProfile = !!user.has_profile;
-          navigate(hasProfile ? '/artist/dashboard' : '/onboard', { replace: true });
+          navigate(user.has_profile ? '/artist/dashboard' : '/onboard', { replace: true });
         } else if (user.role === 'admin') {
           navigate('/admin', { replace: true });
         } else {
@@ -225,7 +235,7 @@ export default function Login() {
             </Form.Group>
 
             <div className="d-flex justify-content-between align-items-center mb-3">
-              <div /> {/* placeholder to keep spacing */}
+              <div />
               <Link to="/forgot-password" className="small">Forgot password?</Link>
             </div>
 
@@ -252,4 +262,4 @@ export default function Login() {
       </Card>
     </>
   );
-} 
+}
