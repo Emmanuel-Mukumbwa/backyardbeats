@@ -42,6 +42,10 @@ router.post('/users/:id/ban', /* auth, isAdmin, */ admin.banUser);
 router.delete('/users/:id', /* auth, isAdmin, */ admin.softDeleteUser);
 router.post('/users/:id/restore', /* auth, isAdmin, */ admin.restoreUser);
 
+// Artists (list all artists for admin dropdown)
+assertHandler('listArtists');
+router.get('/artists', /* auth, isAdmin, */ admin.listArtists);
+
 // Artists approvals
 assertHandler('pendingArtists');
 assertHandler('approveArtist');
