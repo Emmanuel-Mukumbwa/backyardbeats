@@ -1,5 +1,5 @@
 // src/pages/ArtistDashboard.js
-import React, { useState, useEffect,  useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
   Tabs,
@@ -11,7 +11,9 @@ import {
   Col,
   Image,
   Badge,
-  Stack
+  Stack,
+  Dropdown,
+  ButtonGroup
 } from 'react-bootstrap';
 import axios from '../api/axiosConfig';
 import RatingsList from '../components/RatingsList';
@@ -21,7 +23,7 @@ import AddTrackModal from '../components/AddTrackModal';
 import AddEventModal from '../components/AddEventModal';
 import TracksPanel from '../components/artist/TracksPanel';
 import EventsPanel from '../components/artist/EventsPanel';
-import { FaMusic, FaCalendarAlt, FaChartLine, FaPlus, FaEdit, FaUserCircle } from 'react-icons/fa';
+import { FaMusic, FaCalendarAlt, FaChartLine, FaPlus, FaEdit, FaUserCircle, FaEllipsisV, FaHome } from 'react-icons/fa';
 
 export default function ArtistDashboard() {
   const navigate = useNavigate();
@@ -112,7 +114,7 @@ export default function ArtistDashboard() {
   function statusBadge(status) {
     switch (status) {
       case 'approved': return <Badge bg="success">Approved</Badge>;
-      case 'pending': return <Badge bg="warning" className="text-dark">Pending verification</Badge>;
+      case 'pending': return <Badge bg="warning" className="text-dark">Pending</Badge>;
       case 'rejected': return <Badge bg="danger">Rejected</Badge>;
       case 'banned': return <Badge bg="danger">Banned</Badge>;
       case 'deleted': return <Badge bg="secondary">Deleted</Badge>;
@@ -231,12 +233,10 @@ export default function ArtistDashboard() {
   useEffect(() => {
     if (location && location.state && location.state.onboardingToast) {
       const payload = location.state.onboardingToast;
-      // payload should be plain, serializable: { title?, message, variant?, autohide?, delay? }
       const message = payload.message || 'Your profile is pending verification.';
       const variant = payload.variant || 'success';
       const delay = payload.delay || 10000;
       const autohide = typeof payload.autohide === 'boolean' ? payload.autohide : false;
-
       const buildMessage = payload.title ? `${payload.title}\n\n${message}` : message;
 
       setToast({
@@ -396,6 +396,14 @@ export default function ArtistDashboard() {
 
   const status = computeArtistStatus(artist);
 
+  // --- small helper component for stat blocks ---
+  const StatBlock = ({ label, value, className = '' }) => (
+    <div className={`text-center ${className}`}>
+      <div className="h5 mb-0">{value}</div>
+      <div className="small text-muted">{label}</div>
+    </div>
+  );
+
   return (
     <div>
       <ToastMessage
@@ -408,35 +416,87 @@ export default function ArtistDashboard() {
         autohide={typeof toast.autohide === 'boolean' ? toast.autohide : true}
       />
 
+      {/* Inline styles for responsive tweaks + FAB */}
+      <style>{`
+        /* FAB for mobile quick action */
+        .artist-fab {
+          position: fixed;
+          right: 16px;
+          bottom: 20px;
+          z-index: 1060;
+          display: none;
+        }
+        @media (max-width: 767.98px) {
+          .artist-fab { display: block; }
+        }
+        .artist-header-actions .btn { min-width: 0; }
+        .artist-header-actions .btn .btn-text { display: inline; }
+        @media (max-width: 767.98px) {
+          .artist-header-actions .btn .btn-text { display: none; }
+        }
+        .overview-card .avatar { width: 160px; height: 160px; object-fit: cover; border: 4px solid #f8f9fa; }
+        @media (max-width: 767.98px) {
+          .overview-card .avatar { width: 120px; height: 120px; }
+        }
+      `}</style>
+
       <div className="d-flex justify-content-between align-items-center mb-3">
         <div>
           <h2 className="mb-0">Artist Dashboard</h2>
           <div className="text-muted small">Manage your tracks, events and profile</div>
         </div>
 
-        <div>
-          <Stack direction="horizontal" gap={2}>
-            <Button variant="outline-secondary" size="sm" onClick={() => navigate('/')}>Back to Home</Button>
-            <Button variant="success" size="sm" onClick={handleAddTrackClick}>
-              <FaPlus className="me-1" /> Add Track
-            </Button>
-            <Button variant="outline-success" size="sm" onClick={handleAddEventClick}>
-              <FaPlus className="me-1" /> Add Event
-            </Button>
-          </Stack>
+        <div className="artist-header-actions d-flex align-items-center">
+          {/* desktop actions: show labels on md+ */}
+          <div className="d-none d-md-inline">
+            <Stack direction="horizontal" gap={2}>
+              <Button variant="outline-secondary" size="sm" onClick={() => navigate('/')} aria-label="Back to home">
+                <FaHome className="me-1" /> Back to Home
+              </Button>
+              <Button variant="success" size="sm" onClick={handleAddTrackClick} aria-label="Add track">
+                <FaPlus className="me-1" /> Add Track
+              </Button>
+              <Button variant="outline-success" size="sm" onClick={handleAddEventClick} aria-label="Add event">
+                <FaPlus className="me-1" /> Add Event
+              </Button>
+            </Stack>
+          </div>
+
+          {/* mobile actions: compact dropdown */}
+          <div className="d-inline d-md-none ms-2">
+            <Dropdown as={ButtonGroup}>
+              <Dropdown.Toggle variant="outline-secondary" size="sm" id="artist-actions-dropdown" aria-label="Actions menu">
+                <FaEllipsisV />
+              </Dropdown.Toggle>
+              <Dropdown.Menu align="end">
+                <Dropdown.Item onClick={() => navigate('/')} aria-label="Back to home">Back to Home</Dropdown.Item>
+                <Dropdown.Item onClick={handleAddTrackClick} aria-label="Add track">Add Track</Dropdown.Item>
+                <Dropdown.Item onClick={handleAddEventClick} aria-label="Add event">Add Event</Dropdown.Item>
+                <Dropdown.Divider />
+                <Dropdown.Item onClick={() => navigate('/onboard')}>Edit Profile</Dropdown.Item>
+              </Dropdown.Menu>
+            </Dropdown>
+          </div>
         </div>
       </div>
 
-      <Tabs activeKey={activeTab} id="artist-dashboard-tabs" className="mb-3" onSelect={handleTabSelect}>
+      <Tabs
+        activeKey={activeTab}
+        id="artist-dashboard-tabs"
+        className="mb-3"
+        onSelect={handleTabSelect}
+        variant="pills"
+        mountOnEnter
+      >
         <Tab eventKey="overview" title={<span><FaUserCircle className="me-1" /> Overview</span>}>
           <Row className="mt-3">
-            <Col md={4}>
-              <Card className="text-center p-3 shadow-sm">
+            <Col xs={12} md={4}>
+              <Card className="text-center p-3 overview-card shadow-sm">
                 <div style={{ display: 'flex', justifyContent: 'center' }}>
                   <Image
                     src={avatarSrc}
                     roundedCircle
-                    style={{ width: 160, height: 160, objectFit: 'cover', border: '4px solid #f8f9fa' }}
+                    className="avatar"
                     onError={(e) => {
                       e.currentTarget.onerror = null;
                       e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(artist.display_name || artist.username || 'Artist')}&background=0D8ABC&color=fff&size=256`;
@@ -446,35 +506,32 @@ export default function ArtistDashboard() {
                 </div>
 
                 <Card.Body>
-                  <Card.Title className="mt-2 d-flex align-items-center justify-content-center">
-                    <span>{artist.display_name}</span>
-                    <span className="ms-2">{statusBadge(status)}</span>
+                  <Card.Title className="mt-2 d-flex flex-column align-items-center">
+                    <span className="fw-semibold">{artist.display_name}</span>
+                    <span className="mt-2">{statusBadge(status)}</span>
                   </Card.Title>
 
                   <Card.Text className="text-muted small">{artist.bio || 'No bio yet — tell fans about your music.'}</Card.Text>
 
                   <div className="d-flex justify-content-center mt-3">
-                    <Button variant="outline-primary" size="sm" onClick={() => navigate('/onboard')}>
-                      <FaEdit className="me-1" /> Edit Profile
+                    <Button variant="outline-primary" size="sm" onClick={() => navigate('/onboard')} aria-label="Edit profile">
+                      <FaEdit className="me-1" /> <span className="d-none d-md-inline">Edit Profile</span>
                     </Button>
                   </div>
 
                   <hr />
 
-                  <div className="d-flex justify-content-around mt-2">
-                    <div className="text-center">
-                      <div className="h5 mb-0">{tracksCount}</div>
-                      <div className="small text-muted">Tracks</div>
-                    </div>
-                    <div className="text-center">
-                      <div className="h5 mb-0">{eventsCount}</div>
-                      <div className="small text-muted">Events</div>
-                    </div>
-                    <div className="text-center">
-                      <div className="h5 mb-0">{ratingsCount}</div>
-                      <div className="small text-muted">Reviews</div>
-                    </div>
-                  </div>
+                  <Row className="g-2">
+                    <Col xs={4} sm={4}>
+                      <StatBlock label="Tracks" value={tracksCount} />
+                    </Col>
+                    <Col xs={4} sm={4}>
+                      <StatBlock label="Events" value={eventsCount} />
+                    </Col>
+                    <Col xs={4} sm={4}>
+                      <StatBlock label="Reviews" value={ratingsCount} />
+                    </Col>
+                  </Row>
 
                   <hr />
 
@@ -497,17 +554,21 @@ export default function ArtistDashboard() {
               </Card>
             </Col>
 
-            <Col md={8}>
+            <Col xs={12} md={8}>
               <Card className="shadow-sm">
                 <Card.Body>
-                  <h5><FaChartLine className="me-2" /> Engagement</h5>
+                  <div className="d-flex align-items-start justify-content-between">
+                    <h5 className="mb-0"><FaChartLine className="me-2" /> Engagement</h5>
+                    <div className="small text-muted">Updated: {new Date().toLocaleDateString()}</div>
+                  </div>
+
                   <Row className="mt-3">
-                    <Col md={6}>
-                      <div className="mb-2"><strong>Average Rating</strong></div>
+                    <Col xs={12} sm={6} md={6}>
+                      <div className="small text-muted">Average Rating</div>
                       <div className="display-6 text-success">{artist.avg_rating ? Number(artist.avg_rating).toFixed(1) : 'N/A'}</div>
                     </Col>
-                    <Col md={6}>
-                      <div className="mb-2"><strong>Upcoming Events</strong></div>
+                    <Col xs={12} sm={6} md={6}>
+                      <div className="small text-muted">Upcoming Events</div>
                       <div className="display-6">{upcomingCount}</div>
                     </Col>
                   </Row>
@@ -515,10 +576,8 @@ export default function ArtistDashboard() {
                   <hr />
 
                   <div className="mt-2">
-                    <h6>Recent Reviews</h6>
-                    <div>
-                      <RatingsList artistId={artist.id} />
-                    </div>
+                    <h6 className="mb-2">Recent Reviews</h6>
+                    <RatingsList artistId={artist.id} />
                   </div>
                 </Card.Body>
               </Card>
@@ -527,24 +586,32 @@ export default function ArtistDashboard() {
         </Tab>
 
         <Tab eventKey="tracks" title={<span><FaMusic className="me-1" /> Tracks <Badge bg="secondary" className="ms-2">{tracksCount}</Badge></span>}>
-          <TracksPanel
-            tracks={tracks}
-            status={status}
-            onEdit={(t) => { setEditingTrack(t); setShowTrackModal(true); }}
-            onDelete={deleteTrack}
-            resolveToBackend={resolveToBackend}
-            onPlay={recordListen}
-          />
+          <Card className="shadow-sm">
+            <Card.Body>
+              <TracksPanel
+                tracks={tracks}
+                status={status}
+                onEdit={(t) => { setEditingTrack(t); setShowTrackModal(true); }}
+                onDelete={deleteTrack}
+                resolveToBackend={resolveToBackend}
+                onPlay={recordListen}
+              />
+            </Card.Body>
+          </Card>
         </Tab>
 
         <Tab eventKey="events" title={<span><FaCalendarAlt className="me-1" /> Events <Badge bg="secondary" className="ms-2">{eventsCount}</Badge></span>}>
-          <EventsPanel
-            events={events}
-            onEdit={(e) => { setEditingEvent(e); setShowEventModal(true); }}
-            onDelete={deleteEvent}
-            resolveEventImage={resolveEventImage}
-            districtsMap={(id) => (districtsMapObj && (districtsMapObj[String(id)] || districtsMapObj[id])) || null}
-          />
+          <Card className="shadow-sm">
+            <Card.Body>
+              <EventsPanel
+                events={events}
+                onEdit={(e) => { setEditingEvent(e); setShowEventModal(true); }}
+                onDelete={deleteEvent}
+                resolveEventImage={resolveEventImage}
+                districtsMap={(id) => (districtsMapObj && (districtsMapObj[String(id)] || districtsMapObj[id])) || null}
+              />
+            </Card.Body>
+          </Card>
         </Tab>
 
         <Tab eventKey="analytics" title={<span><FaChartLine className="me-1" /> Analytics</span>}>
@@ -553,15 +620,15 @@ export default function ArtistDashboard() {
               <Card.Body>
                 <h5>Engagement Metrics</h5>
                 <Row className="mt-3">
-                  <Col md={4}>
+                  <Col md={4} xs={12}>
                     <div className="small text-muted">Total Plays</div>
                     <div className="h4">—</div>
                   </Col>
-                  <Col md={4}>
+                  <Col md={4} xs={12}>
                     <div className="small text-muted">Average Rating</div>
                     <div className="h4">{artist.avg_rating ? Number(artist.avg_rating).toFixed(1) : 'N/A'}</div>
                   </Col>
-                  <Col md={4}>
+                  <Col md={4} xs={12}>
                     <div className="small text-muted">Reviews</div>
                     <div className="h4">{ratings.length}</div>
                   </Col>
@@ -573,6 +640,13 @@ export default function ArtistDashboard() {
           </div>
         </Tab>
       </Tabs>
+
+      {/* Mobile FAB quick action */}
+      <div className="artist-fab">
+        <Button variant="success" className="rounded-circle shadow-lg" style={{ width: 56, height: 56, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={handleAddTrackClick} aria-label="Add track">
+          <FaPlus />
+        </Button>
+      </div>
 
       <AddTrackModal
         show={showTrackModal}
@@ -592,3 +666,4 @@ export default function ArtistDashboard() {
     </div>
   );
 }
+
