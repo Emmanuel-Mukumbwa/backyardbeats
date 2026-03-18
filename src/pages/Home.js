@@ -17,32 +17,28 @@ export default function Home() {
   const [selectedId, setSelectedId] = useState(null);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
-  const [noMatch, setNoMatch] = useState(false); // show message when filters return nothing
+  const [noMatch, setNoMatch] = useState(false);
 
   const unmounted = useRef(false);
   const debounceRef = useRef(null);
   const resizeTimeoutRef = useRef(null);
 
-  // Responsive columns / limit:
-  // md (>=768) -> 3 columns per row -> 6 per page (2 rows)
-  // lg (>=992) -> 4 columns per row -> 8 per page (2 rows)
-  // xs/sm (<768) -> 2 columns per row -> 2 per page (1 row)
+  // Responsive columns:
+  // md (>=768) -> 3 columns per row
+  // lg (>=992) -> 4 columns per row
+  // xs/sm (<768) -> 2 columns per row
   const getCols = () => {
     if (typeof window === 'undefined') return 4;
     const w = window.innerWidth;
     if (w >= 992) return 4;
     if (w >= 768) return 3;
-    return 2; // show two columns on small screens
+    return 2;
   };
 
-  // compute rows per page depending on cols
-  const rowsForCols = (c) => (c <= 2 ? 1 : 2);
-
   const [cols, setCols] = useState(getCols());
-  const [limit, setLimit] = useState(() => {
-    const c = getCols();
-    return Math.max(1, c) * rowsForCols(c);
-  });
+
+  // LIMIT = number of items per page = columns per row (one row per page)
+  const [limit, setLimit] = useState(() => getCols());
 
   const { user } = useContext(AuthContext);
 
@@ -64,19 +60,20 @@ export default function Home() {
     };
   }, [cols]);
 
-  // when cols change, recalc limit (rows depend on cols) and reset page to 1
+  // when cols change, recalc limit (one row) and reset page to 1
   useEffect(() => {
-    const newLimit = Math.max(1, cols) * rowsForCols(cols);
+    const newLimit = Math.max(1, cols); // one row per page
     if (newLimit !== limit) {
       setLimit(newLimit);
       setPage(1);
+      // Call load directly with the new limit and page 1 (we pass them explicitly)
       loadArtists({ page: 1, limit: newLimit });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cols]);
 
-  // compute params builder (uses current filters & limit)
-  const buildParams = useCallback(({ page: p = page, limit: lim = limit } = {}) => {
+  // build params: DOES NOT depend on `page` (page is passed explicitly)
+  const buildParams = useCallback(({ page: p = 1, limit: lim = limit } = {}) => {
     const params = {};
     if (filters.district) params.district_id = filters.district;
     if (filters.genre) params.genre = filters.genre;
@@ -85,15 +82,18 @@ export default function Home() {
     params.limit = lim;
     params.offset = (p - 1) * lim;
     return params;
-  }, [filters, limit, page]);
+  }, [filters, limit]);
 
-  // loadArtists stable
-  const loadArtists = useCallback(({ page: loadPage = page, limit: forLimit = limit } = {}) => {
+  // loadArtists accepts explicit page & limit and only depends on buildParams
+  const loadArtists = useCallback(({ page: loadPage = 1, limit: forLimit = limit } = {}) => {
     setLoading(true);
     setNoMatch(false);
+
     const params = buildParams({ page: loadPage, limit: forLimit });
+
     axios.get('/artists', { params })
       .then(res => {
+        // API might return array or { items: [], total: X }
         const payload = Array.isArray(res.data) ? { items: res.data, total: res.data.length } : (res.data || { items: [], total: 0 });
         const items = payload.items || [];
         const tot = payload.total || 0;
@@ -103,7 +103,6 @@ export default function Home() {
 
         const filtersActive = Object.values(filters).some(v => v && String(v).trim().length > 0);
         if (filtersActive && items.length === 0) {
-          // show message and allow manual clearing — do NOT auto-clear
           setNoMatch(true);
         } else {
           setNoMatch(false);
@@ -118,19 +117,23 @@ export default function Home() {
       .finally(() => {
         if (!unmounted.current) setLoading(false);
       });
-  }, [buildParams, filters, limit, page]);
+  }, [buildParams, filters, limit]);
 
+  // initial mount + whenever limit changes we do an initial load (page 1)
   useEffect(() => {
-    // initial load uses computed limit
     unmounted.current = false;
+    setPage(1);
     loadArtists({ page: 1, limit });
     return () => {
       unmounted.current = true;
       clearTimeout(debounceRef.current);
     };
+    // We intentionally depend on `loadArtists` and `limit` so changes to filters/limit
+    // result in a fresh initial load. This will NOT re-run when `page` changes
+    // because `page` is not part of loadArtists' dependencies.
   }, [loadArtists, limit]);
 
-  // when filters change, debounce and reset to page 1
+  // debounce filters and reset to page 1
   useEffect(() => {
     clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {
@@ -140,7 +143,7 @@ export default function Home() {
     return () => clearTimeout(debounceRef.current);
   }, [filters, loadArtists, limit]);
 
-  // when page changes
+  // when page (or limit) changes, load that page explicitly
   useEffect(() => {
     loadArtists({ page, limit });
   }, [page, limit, loadArtists]);
@@ -165,7 +168,7 @@ export default function Home() {
   }
 
   const artistHasProfile = user && (user.has_profile === true || user.hasProfile === true);
-  const totalPages = Math.max(1, Math.ceil((total || 0) / limit));
+  const totalPages = Math.max(1, Math.ceil((total || 0) / Math.max(1, limit)));
 
   return (
     <div>
@@ -236,14 +239,13 @@ export default function Home() {
                     </div>
                   </Col>
                 ) : (
-                  // responsive cols: xs=6 (2 per row on small), md=4 (3 per row), lg=3 (4 per row)
                   artists.map(a => (
                     <Col
                       key={a.id}
                       id={`artist-${a.id}`}
-                      xs={6}
-                      md={4}
-                      lg={3}
+                      xs={6}   // 2 per row on small
+                      md={4}  // 3 per row on md
+                      lg={3}  // 4 per row on large
                       className="mb-4"
                     >
                       <ArtistCard
@@ -254,7 +256,7 @@ export default function Home() {
                   ))
                 )}
 
-                {/* Pagination controls at bottom */}
+                {/* Pagination controls */}
                 <Col xs={12} className="d-flex justify-content-between align-items-center mt-2">
                   <div />
                   <div>
@@ -268,7 +270,7 @@ export default function Home() {
           </Col>
         </Row>
 
-        {/* NEW SECTION BELOW: New Releases | Most Played */}
+        {/* New Releases | Most Played */}
         <Row className="mt-5">
           <Col xs={12} md={6} className="mb-4">
             <h6 className="text-uppercase text-muted mb-2">New Releases</h6>
