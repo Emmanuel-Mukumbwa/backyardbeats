@@ -1,4 +1,3 @@
-// src/pages/BrowseMusic.jsx
 import React, { useEffect, useState, useRef, useCallback, useContext } from 'react';
 import axios from '../api/axiosConfig';
 import FilterBar from '../components/FilterBar';
@@ -89,32 +88,56 @@ async function downloadTrackById(trackId, setToast) {
 }
 
 export default function BrowseMusic() {
+  // filters & sort
   const [filters, setFilters] = useState({ district: '', genre: '', mood: '', q: '' });
   const [sort, setSort] = useState('new'); // 'new' | 'most_played'
+
+  // items + pagination
   const [items, setItems] = useState([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
-  const [limit] = useState(12);
+
+  // *** 4 tracks per page as requested ***
+  const [limit] = useState(4);
+
   const [loading, setLoading] = useState(false);
+
+  // audio / playing
   const playingRef = useRef(null);
+
+  // mounted flag
   const mounted = useRef(true);
+
+  // debounce ref for filters
   const debounceRef = useRef(null);
 
+  // UI
   const [showFilters, setShowFilters] = useState(false);
-  const [downloadingId, setDownloadingId] = useState(null); // track which track is being downloaded
+  const [downloadingId, setDownloadingId] = useState(null);
 
-  // toast state accepts JSX in message so we can provide a Login button
+  // toast (accepts JSX)
   const [toast, setToast] = useState({ show: false, message: '', variant: 'info', autohide: true, delay: 3500 });
 
   const navigate = useNavigate();
   const { user, artist: myArtist } = useContext(AuthContext);
 
-  // Fetch helper
+  // Refs that always contain the latest state to avoid stale closures
+  const pageRef = useRef(page);
+  const filtersRef = useRef(filters);
+  const sortRef = useRef(sort);
+  const limitRef = useRef(limit);
+
+  useEffect(() => { pageRef.current = page; }, [page]);
+  useEffect(() => { filtersRef.current = filters; }, [filters]);
+  useEffect(() => { sortRef.current = sort; }, [sort]);
+  useEffect(() => { limitRef.current = limit; }, [limit]);
+
+  // Stable fetch function that reads current values from refs if opts not provided
   const fetchTracks = useCallback(async (opts = {}) => {
-    const p = opts.page ?? page;
-    const lim = opts.limit ?? limit;
-    const s = opts.sort ?? sort;
-    const f = opts.filters ?? filters;
+    const p = opts.page ?? pageRef.current ?? 1;
+    const lim = opts.limit ?? limitRef.current ?? 4;
+    const s = opts.sort ?? sortRef.current ?? 'new';
+    const f = opts.filters ?? filtersRef.current ?? {};
 
     const params = { page: p, limit: lim, sort: s };
     if (f.q) params.q = f.q;
@@ -126,10 +149,14 @@ export default function BrowseMusic() {
     setLoading(true);
     try {
       const res = await axios.get('/public/tracks', { params });
-      const payload = res.data || { items: [], total: 0 };
+      const payload = res.data || { items: [], total: 0, page: p };
+      // normalize
       setItems(payload.items || []);
       setTotal(payload.total || 0);
-      setPage(payload.page || p);
+      // ensure page state matches what server returned or our requested page
+      const serverPage = (typeof payload.page === 'number') ? payload.page : p;
+      setPage(serverPage);
+      pageRef.current = serverPage;
     } catch (err) {
       console.error('Failed to load tracks', err);
       setItems([]);
@@ -137,26 +164,35 @@ export default function BrowseMusic() {
     } finally {
       if (mounted.current) setLoading(false);
     }
-  }, [page, limit, sort, filters]);
+  }, []);
 
+  // initial mount
   useEffect(() => {
     mounted.current = true;
-    fetchTracks({ page: 1, limit, sort, filters });
-    return () => { mounted.current = false; clearTimeout(debounceRef.current); };
-  }, [fetchTracks, limit, sort, filters]);
+    // load page 1 with current filters/sort
+    fetchTracks({ page: 1, limit: limitRef.current, sort: sortRef.current, filters: filtersRef.current });
+    return () => {
+      mounted.current = false;
+      clearTimeout(debounceRef.current);
+    };
+  }, [fetchTracks]);
 
+  // when filters or sort change: debounce, reset page to 1 and fetch
   useEffect(() => {
     clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {
       setPage(1);
-      fetchTracks({ page: 1, limit, sort, filters });
+      pageRef.current = 1;
+      fetchTracks({ page: 1, limit: limitRef.current, sort: sortRef.current, filters: filtersRef.current });
     }, 350);
     return () => clearTimeout(debounceRef.current);
-  }, [filters, sort, fetchTracks, limit]);
+  }, [filters, sort, fetchTracks]);
 
+  // when page changes (user pressed next/previous), fetch that page explicitly
   useEffect(() => {
-    fetchTracks({ page, limit, sort, filters });
-  }, [page, limit, sort, filters, fetchTracks]);
+    // pageRef is already updated by setPage's effect above; just fetch
+    fetchTracks({ page, limit: limitRef.current, sort: sortRef.current, filters: filtersRef.current });
+  }, [page, fetchTracks]);
 
   // audio play/pause helpers to ensure a single playing element
   function handlePlay(audioEl) {
@@ -187,11 +223,9 @@ export default function BrowseMusic() {
 
   // Handle download with toast and disable button while downloading
   const handleDownload = (trackId) => {
-    // If not logged in, show a persistent green toast with a Login button (no redirect)
     if (!user || !user.id) {
       setToast({
         show: true,
-        // JSX message so the toast can include an actionable Login button.
         message: (
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <div>Please log in to download tracks.</div>
@@ -202,25 +236,22 @@ export default function BrowseMusic() {
             </div>
           </div>
         ),
-        variant: 'success', // green
-        autohide: false,    // keep visible until user closes or acts
+        variant: 'success',
+        autohide: false,
         delay: 10000
       });
       return;
     }
 
-    // Authenticated: proceed with download flow
     setDownloadingId(trackId);
     setToast({ show: true, message: 'Preparing your download...', variant: 'info', autohide: true, delay: 3500 });
-    // call download helper; it will set toast on success/failure via the passed setToast
     downloadTrackById(trackId, (toastObj) => {
-      // ensure downloadingId is cleared once helper reports back
       setToast(prev => ({ ...prev, ...toastObj }));
       setDownloadingId(null);
     });
   };
 
-  const totalPages = Math.max(1, Math.ceil((total || 0) / limit));
+  const totalPages = Math.max(1, Math.ceil((total || 0) / Math.max(1, limit)));
   const activeFiltersCount = Object.values(filters).filter(v => v && String(v).trim().length > 0).length;
 
   return (
@@ -384,8 +415,8 @@ export default function BrowseMusic() {
         <Col xs={12} className="d-flex justify-content-between align-items-center">
           <div className="small text-muted">Page {page} / {totalPages}</div>
           <div>
-            <Button variant="link" size="sm" disabled={page <= 1} onClick={() => setPage(p => Math.max(1, p - 1))}><FaChevronLeft /></Button>
-            <Button variant="primary" size="sm" disabled={page >= totalPages} onClick={() => setPage(p => Math.min(totalPages, p + 1))} className="ms-2">Next</Button>
+            <Button variant="link" size="sm" disabled={page <= 1} onClick={() => { setPage(p => Math.max(1, p - 1)); pageRef.current = Math.max(1, pageRef.current - 1); }}><FaChevronLeft /></Button>
+            <Button variant="primary" size="sm" disabled={page >= totalPages} onClick={() => { setPage(p => Math.min(totalPages, p + 1)); pageRef.current = Math.min(totalPages, pageRef.current + 1); }} className="ms-2">Next</Button>
           </div>
         </Col>
       </Row>
