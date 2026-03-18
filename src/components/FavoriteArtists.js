@@ -1,17 +1,19 @@
 import React, { useEffect, useState, useContext } from 'react';
-import { Card, Button, Row, Col, Image, Spinner, Badge, OverlayTrigger, Tooltip } from 'react-bootstrap';
+import { Card, Button, Row, Col, Image, Spinner, Badge } from 'react-bootstrap';
 import axios from '../api/axiosConfig';
 import { AuthContext } from '../context/AuthContext';
 
 /**
  * FavoriteArtists
- * - Shows current user's favorite artists with details:
- *   photo, display name, district, avg_rating, track_count, follower_count, upcoming event badge
+ * - Shows current user's favorite artists with richer details:
+ *   photo, display name, district, district_id, avg_rating, track_count, approved_track_count,
+ *   follower_count, latest_track preview (title), genres, moods, upcoming event badge
  *
  * Props:
  * - max
  * - onFollowChange({ artistId, following })
  */
+
 export default function FavoriteArtists({ max = 12, onFollowChange }) {
   const { user } = useContext(AuthContext);
   const [favorites, setFavorites] = useState([]);
@@ -91,6 +93,13 @@ export default function FavoriteArtists({ max = 12, onFollowChange }) {
     <Row>
       {favorites.map(a => {
         const photoSrc = a.photo_url ? resolveToBackend(a.photo_url) : `https://ui-avatars.com/api/?name=${encodeURIComponent(a.display_name || 'Artist')}&background=0D8ABC&color=fff`;
+        const trackCount = a.track_count ?? 0;
+        const approvedCount = a.approved_track_count ?? 0;
+        const followerCount = a.follower_count ?? 0;
+        const latest = a.latest_track || null;
+        const genres = Array.isArray(a.genres) && a.genres.length ? a.genres.join(', ') : null;
+        const moods = Array.isArray(a.moods) && a.moods.length ? a.moods.join(', ') : null;
+
         return (
           <Col md={6} lg={4} key={a.id} className="mb-3">
             <Card className="h-100 shadow-sm">
@@ -112,14 +121,22 @@ export default function FavoriteArtists({ max = 12, onFollowChange }) {
                   <div>
                     <Card.Title style={{ fontSize: 16, marginBottom: 0 }}>{a.display_name}</Card.Title>
                     <div className="small text-muted">
-                      {a.district ? a.district : 'Unknown district'} • { (a.track_count ?? 0) } { (a.track_count === 1) ? 'track' : 'tracks' }
+                      {a.district ? a.district : (a.district_id ? `District ${a.district_id}` : 'Unknown district')}
                     </div>
                   </div>
 
                   <div className="text-end">
                     {a.has_upcoming_event ? <Badge bg="success" pill>Upcoming</Badge> : null}
-                    <div className="small text-muted mt-1">{ (a.follower_count ?? 0).toLocaleString() } followers</div>
+                    <div className="small text-muted mt-1">{ followerCount.toLocaleString() } followers</div>
                   </div>
+                </div>
+
+                {/* Expanded details */}
+                <div className="mt-2 small text-muted">
+                  <div>{ trackCount } { trackCount === 1 ? 'track' : 'tracks' }{ approvedCount !== null ? ` • ${approvedCount} approved` : '' }</div>
+                  { latest && latest.title ? <div>Latest: <strong style={{ fontSize: 13 }}>{ latest.title }</strong></div> : null }
+                  { genres ? <div>Genres: <span className="text-muted">{ genres }</span></div> : null }
+                  { moods ? <div>Moods: <span className="text-muted">{ moods }</span></div> : null }
                 </div>
 
                 <div className="mt-2 mb-2">
@@ -136,6 +153,7 @@ export default function FavoriteArtists({ max = 12, onFollowChange }) {
                     {processing[a.id] ? <Spinner animation="border" size="sm" /> : 'Unfollow'}
                   </Button>
 
+                  {/* Single View button to artist profile */}
                   <Button
                     size="sm"
                     variant="light"
@@ -143,13 +161,6 @@ export default function FavoriteArtists({ max = 12, onFollowChange }) {
                   >
                     View
                   </Button>
-
-                  <OverlayTrigger
-                    placement="top"
-                    overlay={<Tooltip id={`t-${a.id}`}>Open artist profile</Tooltip>}
-                  >
-                    <Button size="sm" variant="outline-secondary" onClick={() => window.location.href = `/artist/${a.id}`}>...</Button>
-                  </OverlayTrigger>
                 </div>
               </Card.Body>
             </Card>
@@ -158,4 +169,4 @@ export default function FavoriteArtists({ max = 12, onFollowChange }) {
       })}
     </Row>
   );
-} 
+}
