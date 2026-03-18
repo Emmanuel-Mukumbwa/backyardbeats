@@ -1,9 +1,16 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { Table, Button, Image, Badge } from 'react-bootstrap';
-import { FaCalendarAlt, FaEdit, FaTrash } from 'react-icons/fa';
+import { FaCalendarAlt, FaEdit, FaTrash, FaChevronRight } from 'react-icons/fa';
 import PropTypes from 'prop-types';
 import { useNavigate } from 'react-router-dom';
 import axios from '../../api/axiosConfig';
+import './events-panel.css'; // <-- new CSS file (content below)
+
+/**
+ * EventsPanel
+ * - Adds a subtle right-side gradient + "Swipe to see actions" hint on small screens.
+ * - Hint auto-hides after user scrolls or after ~3.5s.
+ */
 
 export default function EventsPanel({
   events = [],
@@ -15,6 +22,11 @@ export default function EventsPanel({
 }) {
   const navigate = useNavigate();
   const [ticketsMap, setTicketsMap] = useState({});
+
+  // Scroll hint state
+  const wrapperRef = useRef(null);
+  const hideHintTimeoutRef = useRef(null);
+  const [showHint, setShowHint] = useState(() => (typeof window !== 'undefined' ? window.innerWidth < 768 : false));
 
   // safe getter for district name - supports function or object map
   const getDistrictName = (districtId) => {
@@ -60,6 +72,45 @@ export default function EventsPanel({
     return () => { mounted = false; };
   }, []);
 
+  useEffect(() => {
+    const wrapper = wrapperRef.current;
+    if (!wrapper) return;
+
+    // update whether hint should show on window resize
+    function handleResize() {
+      const isMobile = window.innerWidth < 768;
+      setShowHint(isMobile);
+      if (!isMobile && wrapper.classList) wrapper.classList.add('no-hint');
+    }
+
+    // hide the hint on first horizontal scroll interaction
+    function onScroll() {
+      if (!showHint) return;
+      setShowHint(false);
+      if (wrapper.classList) wrapper.classList.add('no-hint');
+      if (hideHintTimeoutRef.current) {
+        clearTimeout(hideHintTimeoutRef.current);
+        hideHintTimeoutRef.current = null;
+      }
+    }
+
+    wrapper.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('resize', handleResize);
+
+    // auto-hide after ~3.5s (if user doesn't interact)
+    hideHintTimeoutRef.current = setTimeout(() => {
+      setShowHint(false);
+      if (wrapper.classList) wrapper.classList.add('no-hint');
+    }, 3500);
+
+    return () => {
+      wrapper.removeEventListener('scroll', onScroll);
+      window.removeEventListener('resize', handleResize);
+      if (hideHintTimeoutRef.current) clearTimeout(hideHintTimeoutRef.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const renderStatusBadge = (ev) => {
     if (ev.is_approved) return <Badge bg="success" className="me-2">Approved</Badge>;
     if (ev.is_rejected) return <Badge bg="danger" className="me-2">Rejected</Badge>;
@@ -81,7 +132,6 @@ export default function EventsPanel({
 
   function handleViewTicket(ticket) {
     if (!ticket) return;
-    // navigate with query param to open My Tickets and deep-link the ticket
     navigate(`/support?openTicket=${ticket.id}`);
   }
 
@@ -119,107 +169,118 @@ export default function EventsPanel({
         <div className="small text-muted">Create and manage upcoming gigs</div>
       </div>
 
-      <Table striped hover responsive>
-        <thead>
-          <tr>
-            <th style={{ width: 80 }}>Image</th>
-            <th>Title</th>
-            <th>Date</th>
-            <th>District</th>
-            <th>Venue</th>
-            <th style={{ width: 200 }}>Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          {safeEvents.length > 0 ? safeEvents.map(ev => {
-            const itemStatus = ev && ev.is_approved ? 'approved' : (ev && ev.is_rejected ? 'rejected' : 'pending');
-            const imgSrc = resolveEventImage ? resolveEventImage(ev) : null;
-            const districtName = (ev && (ev.district_name || getDistrictName(ev.district_id))) || (ev && ev.district_id ? String(ev.district_id) : null);
+      {/* Scrollable wrapper with gradient overlay + hint */}
+      <div ref={wrapperRef} className={`events-table-wrapper ${showHint ? '' : 'no-hint'}`} aria-hidden="false">
+        {/* scroll hint (visible on small screens via CSS) */}
+        {showHint && (
+          <div className="scroll-hint" role="status" aria-live="polite">
+            <span className="hint-text">Swipe to see actions</span>
+            <FaChevronRight aria-hidden />
+          </div>
+        )}
 
-            // row highlight for rejected / pending
-            const rowClass = itemStatus === 'rejected' ? 'table-danger' : (itemStatus === 'pending' ? 'table-warning' : '');
-
-            const ticketKey = `event:${String(ev && ev.id)}`;
-            const ticket = ticketsMap[ticketKey];
-
-            return (
-              <tr key={ev && ev.id} className={rowClass}>
-                <td className="align-middle">
-                  {imgSrc ? (
-                    <a href={imgSrc} target="_blank" rel="noreferrer">
-                      <Image
-                        src={imgSrc}
-                        rounded
-                        style={{ width: 64, height: 64, objectFit: 'cover' }}
-                        alt={ev && (ev.title || 'Event image')}
-                        onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent((ev && ev.title) || 'Event')}&background=eee&color=777&size=128`; }}
-                      />
-                    </a>
-                  ) : (
-                    <div style={{ width: 64, height: 64, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f1f3f5', color: '#6c757d', borderRadius: 6 }}>
-                      <FaCalendarAlt />
-                    </div>
-                  )}
-                </td>
-
-                <td className="align-middle">
-                  <div><strong>{(ev && ev.title) || 'Untitled event'}</strong></div>
-                  <div className="mt-1">
-                    {renderStatusBadge(ev || {})}
-                    {!ev?.is_approved && !ev?.is_rejected && <small className="text-muted">Visible to you until approved</small>}
-                  </div>
-
-                  {ev && ev.is_rejected && ev.rejection_reason && (
-                    <div className="mt-1"><small className="text-danger">Reason: {ev.rejection_reason}</small></div>
-                  )}
-
-                  <div className="mt-1">
-                    {ev && ev.is_rejected && ticket && (
-                      <Button size="sm" variant="outline-primary" onClick={() => handleViewTicket(ticket)}>View ticket</Button>
-                    )}
-                    {ev && ev.is_rejected && !ticket && (
-                      <Button size="sm" variant="link" onClick={() => openAppealForEvent(ev)}>Contact support</Button>
-                    )}
-                  </div>
-                </td>
-
-                <td className="align-middle">{formatDate(ev && ev.event_date)}</td>
-
-                <td className="align-middle">{districtName || '-'}</td>
-
-                <td className="align-middle">{(ev && ev.venue) || '-'}</td>
-
-                <td className="align-middle">
-                  <div className="d-flex gap-2">
-                    <Button size="sm" variant="outline-primary" onClick={() => onEdit && onEdit(ev)}>
-                      <FaEdit className="me-1" /> Edit
-                    </Button>
-
-                    {ev && ev.is_rejected && (
-                      <Button size="sm" variant="outline-primary" onClick={() => openAppealForEvent(ev)}>
-                        Appeal
-                      </Button>
-                    )}
-
-                    <Button size="sm" variant="outline-danger" onClick={() => onDelete && onDelete(ev && ev.id)}>
-                      <FaTrash className="me-1" /> Delete
-                    </Button>
-                  </div>
-                </td>
-              </tr>
-            );
-          }) : (
+        <Table striped hover responsive>
+          <thead>
             <tr>
-              <td colSpan={6} className="text-center text-muted">No events yet — create your first event.</td>
+              <th style={{ width: 80 }}>Image</th>
+              <th>Title</th>
+              <th>Date</th>
+              <th>District</th>
+              <th>Venue</th>
+              <th style={{ width: 200 }}>Actions</th>
             </tr>
-          )}
-        </tbody>
-      </Table>
+          </thead>
+          <tbody>
+            {safeEvents.length > 0 ? safeEvents.map(ev => {
+              const itemStatus = ev && ev.is_approved ? 'approved' : (ev && ev.is_rejected ? 'rejected' : 'pending');
+              const imgSrc = resolveEventImage ? resolveEventImage(ev) : null;
+              const districtName = (ev && (ev.district_name || getDistrictName(ev.district_id))) || (ev && ev.district_id ? String(ev.district_id) : null);
+
+              // row highlight for rejected / pending
+              const rowClass = itemStatus === 'rejected' ? 'table-danger' : (itemStatus === 'pending' ? 'table-warning' : '');
+
+              const ticketKey = `event:${String(ev && ev.id)}`;
+              const ticket = ticketsMap[ticketKey];
+
+              return (
+                <tr key={ev && ev.id} className={rowClass}>
+                  <td className="align-middle">
+                    {imgSrc ? (
+                      <a href={imgSrc} target="_blank" rel="noreferrer">
+                        <Image
+                          src={imgSrc}
+                          rounded
+                          style={{ width: 64, height: 64, objectFit: 'cover' }}
+                          alt={ev && (ev.title || 'Event image')}
+                          onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent((ev && ev.title) || 'Event')}&background=eee&color=777&size=128`; }}
+                        />
+                      </a>
+                    ) : (
+                      <div style={{ width: 64, height: 64, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f1f3f5', color: '#6c757d', borderRadius: 6 }}>
+                        <FaCalendarAlt />
+                      </div>
+                    )}
+                  </td>
+
+                  <td className="align-middle">
+                    <div><strong>{(ev && ev.title) || 'Untitled event'}</strong></div>
+                    <div className="mt-1">
+                      {renderStatusBadge(ev || {})}
+                      {!ev?.is_approved && !ev?.is_rejected && <small className="text-muted">Visible to you until approved</small>}
+                    </div>
+
+                    {ev && ev.is_rejected && ev.rejection_reason && (
+                      <div className="mt-1"><small className="text-danger">Reason: {ev.rejection_reason}</small></div>
+                    )}
+
+                    <div className="mt-1">
+                      {ev && ev.is_rejected && ticket && (
+                        <Button size="sm" variant="outline-primary" onClick={() => handleViewTicket(ticket)}>View ticket</Button>
+                      )}
+                      {ev && ev.is_rejected && !ticket && (
+                        <Button size="sm" variant="link" onClick={() => openAppealForEvent(ev)}>Contact support</Button>
+                      )}
+                    </div>
+                  </td>
+
+                  <td className="align-middle">{formatDate(ev && ev.event_date)}</td>
+
+                  <td className="align-middle">{districtName || '-'}</td>
+
+                  <td className="align-middle">{(ev && ev.venue) || '-'}</td>
+
+                  <td className="align-middle">
+                    <div className="d-flex gap-2">
+                      <Button size="sm" variant="outline-primary" onClick={() => onEdit && onEdit(ev)}>
+                        <FaEdit className="me-1" /> Edit
+                      </Button>
+
+                      {ev && ev.is_rejected && (
+                        <Button size="sm" variant="outline-primary" onClick={() => openAppealForEvent(ev)}>
+                          Appeal
+                        </Button>
+                      )}
+
+                      <Button size="sm" variant="outline-danger" onClick={() => onDelete && onDelete(ev && ev.id)}>
+                        <FaTrash className="me-1" /> Delete
+                      </Button>
+                    </div>
+                  </td>
+                </tr>
+              );
+            }) : (
+              <tr>
+                <td colSpan={6} className="text-center text-muted">No events yet — create your first event.</td>
+              </tr>
+            )}
+          </tbody>
+        </Table>
+      </div>
     </div>
   );
 }
 
-EventsPanel.propTypes = { 
+EventsPanel.propTypes = {
   events: PropTypes.array,
   onEdit: PropTypes.func.isRequired,
   onDelete: PropTypes.func.isRequired,
