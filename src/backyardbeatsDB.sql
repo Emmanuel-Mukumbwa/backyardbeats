@@ -542,3 +542,8 @@ CREATE INDEX idx_favorites_artist_id ON favorites(artist_id);
 -- Support tickets table
 CREATE INDEX idx_support_tickets_assignee ON support_tickets(assignee_id);
 CREATE INDEX idx_support_tickets_created ON support_tickets(created_at);
+
+
+
+
+
