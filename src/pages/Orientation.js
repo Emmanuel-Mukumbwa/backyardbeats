@@ -1,7 +1,6 @@
-// src/pages/Orientation.js
-import React, { useState } from 'react';
+import React, { useState, useContext } from 'react';
 import { Card, Row, Col, Button, Container, Modal } from 'react-bootstrap';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import {
   FaCompass,
   FaUserCircle,
@@ -10,13 +9,56 @@ import {
   FaHeart,
   FaStar
 } from 'react-icons/fa';
+import { AuthContext } from '../context/AuthContext';
+import ToastMessage from '../components/ToastMessage';
 
 export default function Orientation() {
   const [showVideo, setShowVideo] = useState(false);
+  const { user } = useContext(AuthContext);
+  const navigate = useNavigate();
   const SUPPORT_URL = '/support';
+
+  // toast state
+  const [toast, setToast] = useState({ show: false, message: '', variant: 'success', autohide: false, delay: 10000 });
+
+  function requireLoginToast() {
+    setToast({
+      show: true,
+      message: (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div>Please log in to access this page.</div>
+          <div>
+            <Button
+              size="sm"
+              variant="light"
+              onClick={() => {
+                setToast(t => ({ ...t, show: false }));
+                navigate('/login');
+              }}
+            >
+              Login
+            </Button>
+          </div>
+        </div>
+      ),
+      variant: 'success',
+      autohide: false,
+      delay: 10000
+    });
+  }
 
   return (
     <Container className="container-lg py-4">
+      <ToastMessage
+        show={!!toast.show}
+        onClose={() => setToast(s => ({ ...s, show: false }))}
+        message={toast.message}
+        variant={toast.variant}
+        delay={toast.delay || 3500}
+        position="top-end"
+        autohide={typeof toast.autohide === 'boolean' ? toast.autohide : true}
+      />
+
       {/* Page header */}
       <div className="mb-4">
         <h2 className="mb-1">Welcome to BackyardBeats — Quick tour</h2>
@@ -64,7 +106,18 @@ export default function Orientation() {
               </div>
 
               <div className="mt-auto d-flex gap-2">
-                <Button as={Link} to="/onboard" variant="success" size="sm">Artist Onboard</Button>
+                <Button
+                  variant="success"
+                  size="sm"
+                  onClick={() => {
+                    if (user && user.id) navigate('/onboard');
+                    else requireLoginToast();
+                  }}
+                >
+                  Artist Onboard
+                </Button>
+
+                {/* Register should remain publicly accessible */}
                 <Button as={Link} to="/register" variant="outline-secondary" size="sm">Register (Fan)</Button>
               </div>
             </Card.Body>
@@ -85,7 +138,14 @@ export default function Orientation() {
               </div>
 
               <div className="mt-auto">
-                <Button as={Link} to="/artist/dashboard" variant="outline-success" size="sm">
+                <Button
+                  variant="outline-success"
+                  size="sm"
+                  onClick={() => {
+                    if (user && user.id) navigate('/artist/dashboard');
+                    else requireLoginToast();
+                  }}
+                >
                   Your Dashboard
                 </Button>
               </div>
@@ -130,7 +190,16 @@ export default function Orientation() {
               </div>
 
               <div className="mt-auto">
-                <Button as={Link} to="/fan/dashboard" variant="outline-success" size="sm">Your Playlists</Button>
+                <Button
+                  variant="outline-success"
+                  size="sm"
+                  onClick={() => {
+                    if (user && user.id) navigate('/fan/dashboard');
+                    else requireLoginToast();
+                  }}
+                >
+                  Your Playlists
+                </Button>
               </div>
             </Card.Body>
           </Card>
@@ -177,7 +246,6 @@ export default function Orientation() {
           <Modal.Title>BackyardBeats walkthrough</Modal.Title>
         </Modal.Header>
         <Modal.Body className="p-0" style={{minHeight: '360px'}}>
-          {/* Replace the src with your walkthrough video when available */}
           <div style={{ position: 'relative', paddingTop: '56.25%' }}>
             <iframe
               title="BackyardBeats Walkthrough"
