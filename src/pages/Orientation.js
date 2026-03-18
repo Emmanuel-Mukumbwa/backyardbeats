@@ -249,7 +249,7 @@ export default function Orientation() {
           <div style={{ position: 'relative', paddingTop: '56.25%' }}>
             <iframe
               title="BackyardBeats Walkthrough"
-              src="https://www.youtube.com/embed/VIDEO_ID?rel=0"
+              src=""
               style={{ position: 'absolute', top:0, left:0, width:'100%', height:'100%' }}
               frameBorder="0"
               allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
