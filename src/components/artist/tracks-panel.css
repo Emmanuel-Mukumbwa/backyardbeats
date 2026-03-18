@@ -61,5 +61,66 @@
   .tracks-table-wrapper::after { display: none; }
 }
 
-/* If your app has a dark background for table container, override gradient color */
-/* e.g. .dark-theme .tracks-table-wrapper::after { background: linear-gradient(to right, rgba(0,0,0,0), rgba(0,0,0,0.85)); } */
+/*
+  CSS for this component below (save as src/components/artist/tracks-panel.css)
+*/
+
+/* File: src/components/artist/tracks-panel.css */
+
+/* wrapper + scroll hint */
+.tracks-table-wrapper {
+  position: relative;
+  padding-bottom: 8px;
+}
+
+.scroll-hint {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: rgba(255,255,255,0.95);
+  border-radius: 20px;
+  padding: 6px 10px;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  z-index: 40;
+  font-size: 0.9rem;
+}
+
+.tracks-table-wrapper.no-hint .scroll-hint { display: none; }
+
+/* mobile card list */
+.tracks-card-list { }
+.mobile-artwork-fallback {
+  width: 64px;
+  height: 64px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  background:#f1f3f5;
+  color:#6c757d;
+  border-radius:6px;
+}
+
+/* small tweaks for card content */
+.tracks-card-list .card { border-radius: 12px; }
+.tracks-card-list .card-body { padding: 12px; }
+
+@media (min-width: 768px) {
+  .tracks-card-list { display: none; }
+}
+
+@media (max-width: 767.98px) {
+  /* hide table on small screens */
+  .table { display: none !important; }
+}
+
+/* ensure audio controls are visually full width on small cards */
+.tracks-card-list audio { width: 100%; }
+
+/* improve contrast on small-screen hint text */
+.scroll-hint .hint-text { color: #f1f3f5; }
+
+/* make links/buttons in cards wrap nicely */
+.tracks-card-list .btn { white-space: nowrap; }
