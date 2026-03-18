@@ -14,18 +14,32 @@ export default function AddEventModal({
   adminMode = false,
   artists = [],
 }) {
-  // Split title: eventName + organizer (optional)
+  // Title split
   const [eventName, setEventName] = useState('');
   const [organizer, setOrganizer] = useState('');
-  const [selectedArtistId, setSelectedArtistId] = useState(''); // for admin mode
+  const [selectedArtistId, setSelectedArtistId] = useState('');
 
-  // New split description fields
+  // Existing fields (you had these)
   const [whatToExpect, setWhatToExpect] = useState('');
   const [lineup, setLineup] = useState('');
   const [ageRestriction, setAgeRestriction] = useState('');
-  // For editing we still keep a combined description field
   const [description, setDescription] = useState('');
 
+  // New fields to improve description
+  const [highlights, setHighlights] = useState('');
+  const [doorsTime, setDoorsTime] = useState('');   // e.g., "17:00"
+  const [startTime, setStartTime] = useState('');   // e.g., "19:00"
+  const [endTime, setEndTime] = useState('');       // e.g., "22:00"
+  const [ticketPrice, setTicketPrice] = useState(''); // e.g., "MWK 2000" or "Free"
+  const [parkingInfo, setParkingInfo] = useState('');
+  const [accessibilityInfo, setAccessibilityInfo] = useState('');
+  const [contactName, setContactName] = useState('');
+  const [contactPhone, setContactPhone] = useState('');
+  const [sponsors, setSponsors] = useState('');
+  const [dressCode, setDressCode] = useState('');
+  const [notes, setNotes] = useState(''); // general extra notes / FAQ
+
+  // Core form fields
   const [eventDate, setEventDate] = useState('');
   const [districtId, setDistrictId] = useState('');
   const [venue, setVenue] = useState('');
@@ -34,6 +48,7 @@ export default function AddEventModal({
   const [image, setImage] = useState(null);
   const [imagePreview, setImagePreview] = useState(null);
   const previewBlobRef = useRef(null);
+
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
   const [toast, setToast] = useState({ show: false, message: '', variant: 'success' });
@@ -145,8 +160,27 @@ export default function AddEventModal({
       setEventName(parsed.name || '');
       setOrganizer(parsed.organizer || '');
 
-      // For editing, we keep the combined description field
+      // keep combined description for editing
       setDescription(editing.description || editing.desc || '');
+
+      // try to parse commonly stored metadata back into fields if available (best-effort)
+      // NOTE: we intentionally don't overwrite combined description when editing; these are "best-effort"
+      setWhatToExpect(editing.whatToExpect || editing.what_to_expect || '');
+      setLineup(editing.lineup || editing.line_up || '');
+      setAgeRestriction(editing.age_restriction || editing.min_age || '');
+
+      setHighlights(editing.highlights || editing.features || '');
+      setDoorsTime(editing.doors_time || '');
+      setStartTime(editing.start_time || editing.show_start || '');
+      setEndTime(editing.end_time || '');
+      setTicketPrice(editing.ticket_price || editing.price || '');
+      setParkingInfo(editing.parking_info || '');
+      setAccessibilityInfo(editing.accessibility || '');
+      setContactName(editing.contact_name || editing.contact_person || '');
+      setContactPhone(editing.contact_phone || editing.contact || '');
+      setSponsors(editing.sponsors || editing.presented_by || '');
+      setDressCode(editing.dress_code || '');
+      setNotes(editing.notes || '');
 
       if (editing.event_date) {
         setEventDate(String(editing.event_date).split('T')[0]);
@@ -174,13 +208,25 @@ export default function AddEventModal({
         setSelectedArtistId(String(editing.artist_id));
       }
     } else {
-      // Reset all fields for new event
+      // Reset
       setEventName('');
       setOrganizer('');
       setDescription('');
       setWhatToExpect('');
       setLineup('');
       setAgeRestriction('');
+      setHighlights('');
+      setDoorsTime('');
+      setStartTime('');
+      setEndTime('');
+      setTicketPrice('');
+      setParkingInfo('');
+      setAccessibilityInfo('');
+      setContactName('');
+      setContactPhone('');
+      setSponsors('');
+      setDressCode('');
+      setNotes('');
       setEventDate('');
       setDistrictId('');
       setVenue('');
@@ -223,6 +269,85 @@ export default function AddEventModal({
     setError(null);
   };
 
+  // Natural description composer for NEW events
+  const composeNaturalDescription = () => {
+    const paragraphs = [];
+
+    // Leading sentence: highlights or one-liner about event
+    if (highlights?.trim()) {
+      paragraphs.push(`Highlights: ${highlights.trim()}.`);
+    } else if (whatToExpect?.trim()) {
+      paragraphs.push(`${whatToExpect.trim()}.`);
+    }
+
+    // Lineup
+    if (lineup?.trim()) {
+      paragraphs.push(`Lineup: ${lineup.trim()}.`);
+    }
+
+    // Schedule paragraph (doors/start/end)
+    const scheduleParts = [];
+    if (doorsTime) scheduleParts.push(`Doors at ${doorsTime}`);
+    if (startTime) scheduleParts.push(`Show starts at ${startTime}`);
+    if (endTime) scheduleParts.push(`Expected to end around ${endTime}`);
+    if (scheduleParts.length) {
+      paragraphs.push(`Schedule: ${scheduleParts.join('; ')}.`);
+    }
+
+    // Venue & address
+    const venueParts = [];
+    if (venue) venueParts.push(venue);
+    if (address) venueParts.push(address);
+    if (venueParts.length) {
+      paragraphs.push(`Venue: ${venueParts.join(', ')}.`);
+    }
+
+    // Ticket info (URL or price)
+    if (ticketUrl && ticketUrl.trim()) {
+      paragraphs.push(`Tickets: available at ${ticketUrl.trim()}.`);
+    } else if (ticketPrice && ticketPrice.trim()) {
+      paragraphs.push(`Tickets: ${ticketPrice.trim()}.`);
+    }
+
+    // Age restriction
+    if (ageRestriction && ageRestriction.trim()) {
+      paragraphs.push(`Age restriction: ${ageRestriction.trim()}.`);
+    }
+
+    // Parking / transport / accessibility
+    if (parkingInfo && parkingInfo.trim()) {
+      paragraphs.push(`Parking / Transport: ${parkingInfo.trim()}.`);
+    }
+    if (accessibilityInfo && accessibilityInfo.trim()) {
+      paragraphs.push(`Accessibility: ${accessibilityInfo.trim()}.`);
+    }
+
+    // Contact
+    const contactParts = [];
+    if (contactName) contactParts.push(contactName.trim());
+    if (contactPhone) contactParts.push(contactPhone.trim());
+    if (contactParts.length) {
+      paragraphs.push(`Contact: ${contactParts.join(' — ')}.`);
+    }
+
+    // Sponsors & dress code
+    if (sponsors && sponsors.trim()) {
+      paragraphs.push(`Presented by: ${sponsors.trim()}.`);
+    }
+    if (dressCode && dressCode.trim()) {
+      paragraphs.push(`Dress code: ${dressCode.trim()}.`);
+    }
+
+    // Additional notes
+    if (notes && notes.trim()) {
+      paragraphs.push(`${notes.trim()}`);
+    }
+
+    // Combine into a single string with blank line between paragraphs
+    const final = paragraphs.map(p => p.trim()).filter(Boolean).join('\n\n');
+    return final;
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setSaving(true);
@@ -252,15 +377,10 @@ export default function AddEventModal({
     // Build final description
     let finalDescription = '';
     if (editing) {
-      // When editing, use the combined description field
+      // When editing, preserve combined description (do NOT auto-compose)
       finalDescription = description.trim();
     } else {
-      // For new event, combine the split fields
-      const parts = [];
-      if (whatToExpect.trim()) parts.push(`What to expect: ${whatToExpect.trim()}`);
-      if (lineup.trim()) parts.push(`Lineup: ${lineup.trim()}`);
-      if (ageRestriction.trim()) parts.push(`Age restriction: ${ageRestriction.trim()}`);
-      finalDescription = parts.join('\n\n');
+      finalDescription = composeNaturalDescription();
     }
 
     const finalTitle = formatTitle(eventName, organizer);
@@ -283,6 +403,24 @@ export default function AddEventModal({
       if (adminMode && selectedArtistId) {
         fd.append('artist_id', selectedArtistId);
       }
+
+      // Also include the split fields as metadata where helpful (non-breaking)
+      // so backend can persist structured data if you want to (optional)
+      fd.append('highlights', highlights || '');
+      fd.append('doors_time', doorsTime || '');
+      fd.append('start_time', startTime || '');
+      fd.append('end_time', endTime || '');
+      fd.append('ticket_price', ticketPrice || '');
+      fd.append('parking_info', parkingInfo || '');
+      fd.append('accessibility', accessibilityInfo || '');
+      fd.append('contact_name', contactName || '');
+      fd.append('contact_phone', contactPhone || '');
+      fd.append('sponsors', sponsors || '');
+      fd.append('dress_code', dressCode || '');
+      fd.append('notes', notes || '');
+      fd.append('lineup', lineup || '');
+      fd.append('age_restriction', ageRestriction || '');
+      fd.append('what_to_expect', whatToExpect || '');
 
       if (editing && editing.id) {
         const res = await axios.put(`/events/${editing.id}`, fd, { headers: { 'Content-Type': 'multipart/form-data' } });
@@ -331,7 +469,7 @@ export default function AddEventModal({
                 >
                   <option value="">Choose artist...</option>
                   {artists.map(a => (
-                    <option key={a.id} value={a.id}>{a.display_name}</option>
+                    <option key={a.id} value={a.id}>{a.display_name || a.username}</option>
                   ))}
                 </Form.Select>
               </Form.Group>
@@ -375,15 +513,27 @@ export default function AddEventModal({
             ) : (
               <>
                 <Form.Group className="mb-3">
+                  <Form.Label>Highlights</Form.Label>
+                  <Form.Control
+                    as="textarea"
+                    rows={2}
+                    value={highlights}
+                    onChange={(e) => setHighlights(e.target.value)}
+                    placeholder="E.g., Live DJs, food stalls, kids activities"
+                  />
+                </Form.Group>
+
+                <Form.Group className="mb-3">
                   <Form.Label>What to Expect</Form.Label>
                   <Form.Control
                     as="textarea"
                     rows={2}
                     value={whatToExpect}
                     onChange={(e) => setWhatToExpect(e.target.value)}
-                    placeholder="e.g., Live DJ sets, food stalls, family-friendly activities"
+                    placeholder="Describe atmosphere, activities, families welcome, etc."
                   />
                 </Form.Group>
+
                 <Form.Group className="mb-3">
                   <Form.Label>Lineup</Form.Label>
                   <Form.Control
@@ -391,16 +541,85 @@ export default function AddEventModal({
                     rows={2}
                     value={lineup}
                     onChange={(e) => setLineup(e.target.value)}
-                    placeholder="e.g., Artist A, Artist B, DJ C"
+                    placeholder="Artist A, Artist B, DJ C"
                   />
                 </Form.Group>
+
+                <Row>
+                  <Col md={4}>
+                    <Form.Group className="mb-3">
+                      <Form.Label>Doors</Form.Label>
+                      <Form.Control type="time" value={doorsTime} onChange={(e) => setDoorsTime(e.target.value)} />
+                    </Form.Group>
+                  </Col>
+                  <Col md={4}>
+                    <Form.Group className="mb-3">
+                      <Form.Label>Start time</Form.Label>
+                      <Form.Control type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} />
+                    </Form.Group>
+                  </Col>
+                  <Col md={4}>
+                    <Form.Group className="mb-3">
+                      <Form.Label>End time (optional)</Form.Label>
+                      <Form.Control type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} />
+                    </Form.Group>
+                  </Col>
+                </Row>
+
+                <Row>
+                  <Col md={4}>
+                    <Form.Group className="mb-3">
+                      <Form.Label>Ticket price</Form.Label>
+                      <Form.Control value={ticketPrice} onChange={(e) => setTicketPrice(e.target.value)} placeholder="e.g., MWK 2,000 or Free" />
+                    </Form.Group>
+                  </Col>
+                  <Col md={4}>
+                    <Form.Group className="mb-3">
+                      <Form.Label>Age restriction</Form.Label>
+                      <Form.Control value={ageRestriction} onChange={(e) => setAgeRestriction(e.target.value)} placeholder="e.g., 18+, All ages" />
+                    </Form.Group>
+                  </Col>
+                  <Col md={4}>
+                    <Form.Group className="mb-3">
+                      <Form.Label>Dress code</Form.Label>
+                      <Form.Control value={dressCode} onChange={(e) => setDressCode(e.target.value)} placeholder="e.g., Smart casual" />
+                    </Form.Group>
+                  </Col>
+                </Row>
+
                 <Form.Group className="mb-3">
-                  <Form.Label>Age Restriction</Form.Label>
-                  <Form.Control
-                    value={ageRestriction}
-                    onChange={(e) => setAgeRestriction(e.target.value)}
-                    placeholder="e.g., 18+, All ages, etc."
-                  />
+                  <Form.Label>Parking / Transport</Form.Label>
+                  <Form.Control value={parkingInfo} onChange={(e) => setParkingInfo(e.target.value)} placeholder="Parking, nearest bus stop, etc." />
+                </Form.Group>
+
+                <Form.Group className="mb-3">
+                  <Form.Label>Accessibility</Form.Label>
+                  <Form.Control value={accessibilityInfo} onChange={(e) => setAccessibilityInfo(e.target.value)} placeholder="Wheelchair access, ramps, sign language, etc." />
+                </Form.Group>
+
+                <Row>
+                  <Col md={6}>
+                    <Form.Group className="mb-3">
+                      <Form.Label>Contact name</Form.Label>
+                      <Form.Control value={contactName} onChange={(e) => setContactName(e.target.value)} placeholder="Event contact person" />
+                    </Form.Group>
+                  </Col>
+                  <Col md={6}>
+                    <Form.Group className="mb-3">
+                      <Form.Label>Contact phone / email</Form.Label>
+                      <Form.Control value={contactPhone} onChange={(e) => setContactPhone(e.target.value)} placeholder="Phone or email" />
+                    </Form.Group>
+                  </Col>
+                </Row>
+
+                <Form.Group className="mb-3">
+                  <Form.Label>Sponsors / Presented by</Form.Label>
+                  <Form.Control value={sponsors} onChange={(e) => setSponsors(e.target.value)} placeholder="Sponsor names or partners" />
+                </Form.Group>
+
+                <Form.Group className="mb-3">
+                  <Form.Label>Additional notes / FAQ</Form.Label>
+                  <Form.Control as="textarea" rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Any extra notes attendees should know" />
                 </Form.Group>
               </>
             )}
