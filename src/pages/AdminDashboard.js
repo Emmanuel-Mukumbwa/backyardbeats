@@ -1,6 +1,30 @@
+// src/pages/AdminDashboard.jsx
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Tabs, Tab, Alert, Modal, Form, Button } from 'react-bootstrap';
-import { FaPlus } from 'react-icons/fa';
+import {
+  Tabs,
+  Tab,
+  Alert,
+  Modal,
+  Form,
+  Button,
+  Card,
+  Row,
+  Col,
+  Dropdown,
+  ButtonGroup,
+  Stack,
+  Badge
+} from 'react-bootstrap';
+import {
+  FaPlus,
+  FaEllipsisV,
+  FaChartLine,
+  FaUsers,
+  FaCheckCircle,
+  FaStar,
+  FaCogs,
+  FaHome
+} from 'react-icons/fa';
 import axios from '../api/axiosConfig';
 
 import AnalyticsPanel from '../components/admin/AnalyticsPanel';
@@ -62,7 +86,13 @@ export default function AdminDashboard() {
     variant: 'danger'
   });
 
-  const [globalToast, setGlobalToast] = useState({ show: false, message: '', variant: 'success', delay: 4000, title: '' });
+  const [globalToast, setGlobalToast] = useState({
+    show: false,
+    message: '',
+    variant: 'success',
+    delay: 4000,
+    title: ''
+  });
 
   const [activeTab, setActiveTab] = useState(() => {
     try {
@@ -76,14 +106,29 @@ export default function AdminDashboard() {
   const toastTimerRef = useRef(null);
 
   useEffect(() => {
-    try { localStorage.setItem(STORAGE_KEY, activeTab); } catch (e) { /* ignore */ }
+    try {
+      localStorage.setItem(STORAGE_KEY, activeTab);
+    } catch {
+      /* ignore */
+    }
   }, [activeTab]);
 
   /* ---------------- TOAST HELPER ---------------- */
   const showToast = useCallback((message, variant = 'success', delay = 4000, title = '') => {
     if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
-    setGlobalToast({ show: true, message, variant, delay, title });
-    toastTimerRef.current = setTimeout(() => setGlobalToast(t => ({ ...t, show: false })), delay + 200);
+
+    setGlobalToast({
+      show: true,
+      message,
+      variant,
+      delay,
+      title
+    });
+
+    toastTimerRef.current = setTimeout(
+      () => setGlobalToast(t => ({ ...t, show: false })),
+      delay + 200
+    );
   }, []);
 
   /* ---------------- DATA LOADING ---------------- */
@@ -106,6 +151,7 @@ export default function AdminDashboard() {
 
       results.forEach((res, idx) => {
         const name = endpoints[idx].name;
+
         if (res.status === 'fulfilled') {
           const data = res.value.data;
           switch (name) {
@@ -170,11 +216,13 @@ export default function AdminDashboard() {
         axios.get('/admin/artists?all=true'),
         axios.get('/meta/genres')
       ]);
+
       if (artistsRes.status === 'fulfilled') {
         setArtistsList(artistsRes.value.data.artists || []);
       } else {
         console.error('Failed to load artists', artistsRes.reason);
       }
+
       if (genresRes.status === 'fulfilled') {
         setMetaGenres(Array.isArray(genresRes.value.data) ? genresRes.value.data : []);
       } else {
@@ -189,7 +237,7 @@ export default function AdminDashboard() {
     loadDashboardData();
     fetchUsers();
     fetchArtistsAndGenres();
-    // cleanup toast timer
+
     return () => {
       if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
     };
@@ -264,6 +312,7 @@ export default function AdminDashboard() {
   const handleUserSubmit = async (e) => {
     e.preventDefault();
     if (!selectedUser) return;
+
     try {
       await axios.put(`/admin/users/${selectedUser.id}`, {
         displayName: userForm.displayName,
@@ -316,6 +365,11 @@ export default function AdminDashboard() {
     }
   };
 
+  const approvedOrLive = settings.maintenanceMode ? 'Maintenance' : 'Live';
+  const approvalsCount = pendingArtists.length + pendingTracks.length + pendingEvents.length;
+  const usersCount = usersMeta?.total ?? users.length;
+  const ratingsCount = ratings.length;
+
   if (loading) {
     return (
       <div className="d-flex justify-content-center align-items-center py-5">
@@ -325,19 +379,61 @@ export default function AdminDashboard() {
   }
 
   return (
-    <div>
-      {/* Header with title and admin action buttons */}
-      <div className="d-flex justify-content-between align-items-center mb-3">
-        <h2>Admin Dashboard</h2>
-        <div>
-          <Button variant="success" className="me-2" onClick={() => setShowAdminTrackModal(true)}>
-            <FaPlus className="me-1" /> Add Track
-          </Button>
-          <Button variant="outline-success" onClick={() => setShowAdminEventModal(true)}>
-            <FaPlus className="me-1" /> Add Event
-          </Button>
-        </div>
-      </div>
+    <div className="admin-dashboard">
+      <style>{`
+        .admin-dashboard .dashboard-header {
+          gap: 1rem;
+        }
+        .admin-dashboard .dashboard-title {
+          line-height: 1.1;
+        }
+        .admin-dashboard .dashboard-actions .btn {
+          white-space: nowrap;
+        }
+        .admin-dashboard .summary-card {
+          border: 0;
+          box-shadow: 0 0.125rem 0.5rem rgba(0,0,0,.06);
+          border-radius: 1rem;
+          height: 100%;
+        }
+        .admin-dashboard .summary-icon {
+          width: 42px;
+          height: 42px;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          border-radius: 999px;
+          background: rgba(25, 135, 84, 0.1);
+          color: #198754;
+        }
+        .admin-dashboard .admin-tabs .nav-link {
+          white-space: nowrap;
+        }
+        .admin-dashboard .admin-tabs {
+          overflow-x: auto;
+          overflow-y: hidden;
+          flex-wrap: nowrap;
+          -webkit-overflow-scrolling: touch;
+        }
+        .admin-dashboard .admin-tabs .nav-item {
+          flex: 0 0 auto;
+        }
+        @media (max-width: 767.98px) {
+          .admin-dashboard .dashboard-header {
+            flex-direction: column;
+            align-items: stretch !important;
+          }
+          .admin-dashboard .dashboard-actions {
+            width: 100%;
+          }
+          .admin-dashboard .dashboard-actions .btn {
+            width: 100%;
+          }
+          .admin-dashboard .dashboard-actions .btn + .btn {
+            margin-top: 0.5rem;
+          }
+        }
+      `}</style>
 
       <ToastMessage
         show={globalToast.show}
@@ -349,21 +445,151 @@ export default function AdminDashboard() {
         position="top-end"
       />
 
-      {error && <Alert variant="danger" dismissible onClose={() => setError(null)}>{error}</Alert>}
+      {error && (
+        <Alert variant="danger" dismissible onClose={() => setError(null)} className="mb-3">
+          {error}
+        </Alert>
+      )}
+
+      <div className="d-flex justify-content-between align-items-center dashboard-header mb-3">
+        <div>
+          <h2 className="mb-1 dashboard-title">Admin Dashboard</h2>
+          <div className="text-muted small">
+            Manage users, approvals, moderation, and system settings from one place.
+          </div>
+        </div>
+
+        <div className="dashboard-actions">
+          <div className="d-none d-md-inline">
+            <Stack direction="horizontal" gap={2}>
+              <Button variant="outline-secondary" size="sm" onClick={() => window.location.assign('/')} aria-label="Back to home">
+                <FaHome className="me-1" /> Back to Home
+              </Button>
+              <Button variant="success" size="sm" onClick={() => setShowAdminTrackModal(true)}>
+                <FaPlus className="me-1" /> Add Track
+              </Button>
+              <Button variant="outline-success" size="sm" onClick={() => setShowAdminEventModal(true)}>
+                <FaPlus className="me-1" /> Add Event
+              </Button>
+            </Stack>
+          </div>
+
+          <div className="d-inline d-md-none">
+            <Dropdown as={ButtonGroup} className="w-100">
+              <Dropdown.Toggle variant="success" size="sm" className="w-100" id="admin-actions-dropdown" aria-label="Admin quick actions">
+                <FaEllipsisV className="me-2" /> Quick Actions
+              </Dropdown.Toggle>
+              <Dropdown.Menu align="end" className="w-100">
+                <Dropdown.Item onClick={() => window.location.assign('/')}>
+                  <FaHome className="me-2" /> Back to Home
+                </Dropdown.Item>
+                <Dropdown.Item onClick={() => setShowAdminTrackModal(true)}>
+                  <FaPlus className="me-2" /> Add Track
+                </Dropdown.Item>
+                <Dropdown.Item onClick={() => setShowAdminEventModal(true)}>
+                  <FaPlus className="me-2" /> Add Event
+                </Dropdown.Item>
+                <Dropdown.Divider />
+                <Dropdown.Item onClick={() => setActiveTab('settings')}>
+                  <FaCogs className="me-2" /> System Settings
+                </Dropdown.Item>
+              </Dropdown.Menu>
+            </Dropdown>
+          </div>
+        </div>
+      </div>
+
+      <Row className="g-3 mb-3">
+        <Col xs={6} md={3}>
+          <Card className="summary-card">
+            <Card.Body className="p-3">
+              <Stack direction="horizontal" gap={3}>
+                <div className="summary-icon">
+                  <FaUsers />
+                </div>
+                <div>
+                  <div className="small text-muted">Users</div>
+                  <div className="h5 mb-0">{usersCount}</div>
+                </div>
+              </Stack>
+            </Card.Body>
+          </Card>
+        </Col>
+        <Col xs={6} md={3}>
+          <Card className="summary-card">
+            <Card.Body className="p-3">
+              <Stack direction="horizontal" gap={3}>
+                <div className="summary-icon">
+                  <FaCheckCircle />
+                </div>
+                <div>
+                  <div className="small text-muted">Approvals</div>
+                  <div className="h5 mb-0">{approvalsCount}</div>
+                </div>
+              </Stack>
+            </Card.Body>
+          </Card>
+        </Col>
+        <Col xs={6} md={3}>
+          <Card className="summary-card">
+            <Card.Body className="p-3">
+              <Stack direction="horizontal" gap={3}>
+                <div className="summary-icon">
+                  <FaStar />
+                </div>
+                <div>
+                  <div className="small text-muted">Ratings</div>
+                  <div className="h5 mb-0">{ratingsCount}</div>
+                </div>
+              </Stack>
+            </Card.Body>
+          </Card>
+        </Col>
+        <Col xs={6} md={3}>
+          <Card className="summary-card">
+            <Card.Body className="p-3">
+              <Stack direction="horizontal" gap={3}>
+                <div className="summary-icon">
+                  <FaChartLine />
+                </div>
+                <div>
+                  <div className="small text-muted">System</div>
+                  <div className="h5 mb-0">{approvedOrLive}</div>
+                </div>
+              </Stack>
+            </Card.Body>
+          </Card>
+        </Col>
+      </Row>
 
       <Tabs
         activeKey={activeTab}
         onSelect={(k) => {
           if (!k) return;
           setActiveTab(k);
-          try { localStorage.setItem(STORAGE_KEY, k); } catch (e) { /* ignore */ }
+          try {
+            localStorage.setItem(STORAGE_KEY, k);
+          } catch {
+            /* ignore */
+          }
         }}
-        className="mb-3"
+        className="mb-3 admin-tabs"
+        variant="pills"
+        mountOnEnter
       >
-        <Tab eventKey="analytics" title="Analytics">
+        <Tab eventKey="analytics" title={<span><FaChartLine className="me-1" /> Analytics</span>}>
           <AnalyticsPanel analytics={analytics} />
         </Tab>
-        <Tab eventKey="users" title="User Management">
+
+        <Tab
+          eventKey="users"
+          title={
+            <span>
+              <FaUsers className="me-1" /> User Management{' '}
+              <Badge bg="secondary" className="ms-2">{users.length}</Badge>
+            </span>
+          }
+        >
           <UsersTable
             users={users}
             onEdit={(u) => handleUserAction(u, 'edit')}
@@ -378,34 +604,72 @@ export default function AdminDashboard() {
             }}
           />
         </Tab>
-        <Tab eventKey="artists" title="Artist Approval">
+
+        <Tab
+          eventKey="artists"
+          title={
+            <span>
+              <FaCheckCircle className="me-1" /> Artist Approval{' '}
+              <Badge bg="secondary" className="ms-2">{pendingArtists.length}</Badge>
+            </span>
+          }
+        >
           <PendingApprovals
             items={pendingArtists}
             type="artist"
             onDone={() => loadDashboardData()}
           />
         </Tab>
-        <Tab eventKey="tracks" title="Track Approval">
+
+        <Tab
+          eventKey="tracks"
+          title={
+            <span>
+              <FaCheckCircle className="me-1" /> Track Approval{' '}
+              <Badge bg="secondary" className="ms-2">{pendingTracks.length}</Badge>
+            </span>
+          }
+        >
           <PendingApprovals
             items={pendingTracks}
             type="track"
             onDone={() => loadDashboardData()}
           />
         </Tab>
-        <Tab eventKey="events" title="Event Approval">
+
+        <Tab
+          eventKey="events"
+          title={
+            <span>
+              <FaCheckCircle className="me-1" /> Event Approval{' '}
+              <Badge bg="secondary" className="ms-2">{pendingEvents.length}</Badge>
+            </span>
+          }
+        >
           <PendingApprovals
             items={pendingEvents}
             type="event"
             onDone={() => loadDashboardData()}
           />
         </Tab>
-        <Tab eventKey="moderation" title="Moderation">
+
+        <Tab
+          eventKey="moderation"
+          title={
+            <span>
+              <FaStar className="me-1" /> Moderation{' '}
+              <Badge bg="secondary" className="ms-2">{ratings.length}</Badge>
+            </span>
+          }
+        >
           <RatingsModeration ratings={ratings} onDelete={moderateRating} />
         </Tab>
-        <Tab eventKey="support" title="Support">
+
+        <Tab eventKey="support" title={<span><FaUsers className="me-1" /> Support</span>}>
           <SupportPanel />
         </Tab>
-        <Tab eventKey="settings" title="System Settings">
+
+        <Tab eventKey="settings" title={<span><FaCogs className="me-1" /> System Settings</span>}>
           <SettingsPanel settings={settings} onEdit={() => setShowSettingsModal(true)} />
         </Tab>
       </Tabs>
@@ -422,6 +686,7 @@ export default function AdminDashboard() {
         artists={artistsList}
         genres={metaGenres.map(g => g.name)}
       />
+
       <AddEventModal
         show={showAdminEventModal}
         onHide={() => setShowAdminEventModal(false)}
@@ -435,7 +700,13 @@ export default function AdminDashboard() {
       />
 
       {/* User edit modal */}
-      <Modal show={showUserModal} onHide={() => setShowUserModal(false)}>
+      <Modal
+        show={showUserModal}
+        onHide={() => setShowUserModal(false)}
+        centered
+        scrollable
+        fullscreen="sm-down"
+      >
         <Modal.Header closeButton>
           <Modal.Title>Edit User</Modal.Title>
         </Modal.Header>
@@ -443,31 +714,61 @@ export default function AdminDashboard() {
           <Modal.Body>
             <Form.Group className="mb-3">
               <Form.Label>Display Name</Form.Label>
-              <Form.Control value={userForm.displayName} onChange={e => setUserForm({ ...userForm, displayName: e.target.value })} />
+              <Form.Control
+                value={userForm.displayName}
+                onChange={e => setUserForm({ ...userForm, displayName: e.target.value })}
+                placeholder="Enter display name"
+              />
             </Form.Group>
+
             <Form.Group className="mb-3">
               <Form.Label>Email</Form.Label>
-              <Form.Control value={userForm.email} onChange={e => setUserForm({ ...userForm, email: e.target.value })} />
+              <Form.Control
+                type="email"
+                value={userForm.email}
+                onChange={e => setUserForm({ ...userForm, email: e.target.value })}
+                placeholder="Enter email address"
+              />
             </Form.Group>
+
             <Form.Group className="mb-3">
               <Form.Label>Role</Form.Label>
-              <Form.Select value={userForm.role} onChange={e => setUserForm({ ...userForm, role: e.target.value })}>
+              <Form.Select
+                value={userForm.role}
+                onChange={e => setUserForm({ ...userForm, role: e.target.value })}
+              >
                 <option value="fan">Fan</option>
                 <option value="artist">Artist</option>
                 <option value="admin">Admin</option>
               </Form.Select>
             </Form.Group>
-            <Form.Check type="checkbox" label="Banned" checked={userForm.banned} onChange={e => setUserForm({ ...userForm, banned: e.target.checked })} />
+
+            <Form.Check
+              type="checkbox"
+              label="Banned"
+              checked={userForm.banned}
+              onChange={e => setUserForm({ ...userForm, banned: e.target.checked })}
+            />
           </Modal.Body>
-          <Modal.Footer>
-            <Button variant="secondary" onClick={() => setShowUserModal(false)}>Cancel</Button>
-            <Button type="submit">Save</Button>
+          <Modal.Footer className="d-flex flex-column flex-sm-row gap-2">
+            <Button variant="secondary" className="w-100 w-sm-auto" onClick={() => setShowUserModal(false)}>
+              Cancel
+            </Button>
+            <Button type="submit" className="w-100 w-sm-auto">
+              Save Changes
+            </Button>
           </Modal.Footer>
         </Form>
       </Modal>
 
       {/* Settings modal */}
-      <Modal show={showSettingsModal} onHide={() => setShowSettingsModal(false)}>
+      <Modal
+        show={showSettingsModal}
+        onHide={() => setShowSettingsModal(false)}
+        centered
+        scrollable
+        fullscreen="sm-down"
+      >
         <Modal.Header closeButton>
           <Modal.Title>System Settings</Modal.Title>
         </Modal.Header>
@@ -475,13 +776,27 @@ export default function AdminDashboard() {
           <Modal.Body>
             <Form.Group className="mb-3">
               <Form.Label>Site Name</Form.Label>
-              <Form.Control value={settings.siteName} onChange={e => setSettings({ ...settings, siteName: e.target.value })} />
+              <Form.Control
+                value={settings.siteName}
+                onChange={e => setSettings({ ...settings, siteName: e.target.value })}
+                placeholder="Enter site name"
+              />
             </Form.Group>
-            <Form.Check type="checkbox" label="Maintenance Mode" checked={settings.maintenanceMode} onChange={e => setSettings({ ...settings, maintenanceMode: e.target.checked })} />
+
+            <Form.Check
+              type="checkbox"
+              label="Maintenance Mode"
+              checked={settings.maintenanceMode}
+              onChange={e => setSettings({ ...settings, maintenanceMode: e.target.checked })}
+            />
           </Modal.Body>
-          <Modal.Footer>
-            <Button variant="secondary" onClick={() => setShowSettingsModal(false)}>Cancel</Button>
-            <Button type="submit">Save</Button>
+          <Modal.Footer className="d-flex flex-column flex-sm-row gap-2">
+            <Button variant="secondary" className="w-100 w-sm-auto" onClick={() => setShowSettingsModal(false)}>
+              Cancel
+            </Button>
+            <Button type="submit" className="w-100 w-sm-auto">
+              Save Settings
+            </Button>
           </Modal.Footer>
         </Form>
       </Modal>
