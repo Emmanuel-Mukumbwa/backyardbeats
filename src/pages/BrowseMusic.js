@@ -1,12 +1,28 @@
-// src/pages/BrowseMusic.js
-import React, { useEffect, useState, useRef, useCallback, useContext } from 'react';
+import React, {
+  useEffect,
+  useState,
+  useRef,
+  useCallback,
+  useContext,
+  useLayoutEffect
+} from 'react';
 import axios from '../api/axiosConfig';
 import FilterBar from '../components/FilterBar';
-import { Container, Row, Col, Button, Spinner, ListGroup, Image, Form, Collapse } from 'react-bootstrap';
+import {
+  Container,
+  Row,
+  Col,
+  Button,
+  Spinner,
+  ListGroup,
+  Image,
+  Form,
+  Collapse
+} from 'react-bootstrap';
 import { FaChevronLeft, FaMusic, FaFilter } from 'react-icons/fa';
 import { useNavigate } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
-import ToastMessage from '../components/ToastMessage'; // toast wrapper you provided
+import ToastMessage from '../components/ToastMessage';
 
 /** sanitize file name for client (small helper) */
 function sanitizeFilename(s) {
@@ -18,17 +34,77 @@ function sanitizeFilename(s) {
     .slice(0, 190);
 }
 
+/** title that scrolls, pauses at the end, then restarts without duplicating visible text */
+function ScrollingTitle({ text, className = '', threshold = 28 }) {
+  const viewportRef = useRef(null);
+  const textRef = useRef(null);
+  const [shouldScroll, setShouldScroll] = useState(false);
+  const [shift, setShift] = useState(0);
+
+  const measure = useCallback(() => {
+    const viewport = viewportRef.current;
+    const textEl = textRef.current;
+    if (!viewport || !textEl) return;
+
+    const viewportWidth = viewport.clientWidth || 0;
+    const textWidth = textEl.scrollWidth || 0;
+    const needsScroll = textWidth > viewportWidth + 8 && String(text || '').length > threshold;
+
+    setShouldScroll(needsScroll);
+    setShift(Math.max(0, textWidth - viewportWidth));
+  }, [text, threshold]);
+
+  useLayoutEffect(() => {
+    measure();
+  }, [measure]);
+
+  useEffect(() => {
+    if (!viewportRef.current) return;
+
+    const ro = new ResizeObserver(() => measure());
+    ro.observe(viewportRef.current);
+
+    return () => ro.disconnect();
+  }, [measure]);
+
+  if (!text) return null;
+
+  return (
+    <div
+      ref={viewportRef}
+      className={`browse-title-viewport ${className}`}
+      title={text}
+    >
+      <span
+        ref={textRef}
+        className={`browse-title-text ${shouldScroll ? 'is-scrolling' : 'is-static'}`}
+        style={{
+          '--scroll-shift': `${shift}px`
+        }}
+      >
+        {text}
+      </span>
+    </div>
+  );
+}
+
 /** download helper (forces filename by creating File object) */
 async function downloadTrackById(trackId, setToast) {
   try {
     const res = await axios.get(`/download/${trackId}`, { responseType: 'blob' });
 
-    const disposition = (res.headers && (res.headers['content-disposition'] || res.headers['Content-Disposition'])) || '';
+    const disposition =
+      (res.headers && (res.headers['content-disposition'] || res.headers['Content-Disposition'])) || '';
     let filename = null;
+
     if (disposition) {
       const fnStar = disposition.match(/filename\*\s*=\s*(?:UTF-8'')?([^;]+)/i);
       if (fnStar && fnStar[1]) {
-        try { filename = decodeURIComponent(fnStar[1].replace(/['"]/g, '')); } catch (e) { filename = fnStar[1].replace(/['"]/g, ''); }
+        try {
+          filename = decodeURIComponent(fnStar[1].replace(/['"]/g, ''));
+        } catch (e) {
+          filename = fnStar[1].replace(/['"]/g, '');
+        }
       }
       if (!filename) {
         const quoted = disposition.match(/filename\s*=\s*"([^"]+)"/i);
@@ -79,7 +155,16 @@ async function downloadTrackById(trackId, setToast) {
       a.remove();
       window.URL.revokeObjectURL(url);
     }
-    if (typeof setToast === 'function') setToast({ show: true, message: `Download started: ${filename}`, variant: 'success', autohide: true, delay: 3500 });
+
+    if (typeof setToast === 'function') {
+      setToast({
+        show: true,
+        message: `Download started: ${filename}`,
+        variant: 'success',
+        autohide: true,
+        delay: 3500
+      });
+    }
   } catch (err) {
     if (typeof setToast === 'function') {
       const message = (err && err.message) ? err.message : 'Download failed';
@@ -89,40 +174,32 @@ async function downloadTrackById(trackId, setToast) {
 }
 
 export default function BrowseMusic() {
-  // filters & sort
   const [filters, setFilters] = useState({ district: '', genre: '', mood: '', q: '' });
-  const [sort, setSort] = useState('new'); // 'new' | 'most_played'
+  const [sort, setSort] = useState('new');
 
-  // items + pagination
   const [items, setItems] = useState([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
-
-  // *** 4 tracks per page as requested ***
   const [limit] = useState(4);
-
   const [loading, setLoading] = useState(false);
 
-  // audio / playing
   const playingRef = useRef(null);
-
-  // mounted flag
   const mounted = useRef(true);
-
-  // debounce ref for filters
   const debounceRef = useRef(null);
 
-  // UI
   const [showFilters, setShowFilters] = useState(false);
   const [downloadingId, setDownloadingId] = useState(null);
-
-  // toast (accepts JSX)
-  const [toast, setToast] = useState({ show: false, message: '', variant: 'info', autohide: true, delay: 3500 });
+  const [toast, setToast] = useState({
+    show: false,
+    message: '',
+    variant: 'info',
+    autohide: true,
+    delay: 3500
+  });
 
   const navigate = useNavigate();
   const { user, artist: myArtist } = useContext(AuthContext);
 
-  // Refs that always contain the latest state to avoid stale closures
   const pageRef = useRef(page);
   const filtersRef = useRef(filters);
   const sortRef = useRef(sort);
@@ -133,7 +210,6 @@ export default function BrowseMusic() {
   useEffect(() => { sortRef.current = sort; }, [sort]);
   useEffect(() => { limitRef.current = limit; }, [limit]);
 
-  // Stable fetch function that reads current values from refs if opts not provided
   const fetchTracks = useCallback(async (opts = {}) => {
     const p = opts.page ?? pageRef.current ?? 1;
     const lim = opts.limit ?? limitRef.current ?? 4;
@@ -151,10 +227,10 @@ export default function BrowseMusic() {
     try {
       const res = await axios.get('/public/tracks', { params });
       const payload = res.data || { items: [], total: 0, page: p };
-      // normalize
+
       setItems(payload.items || []);
       setTotal(payload.total || 0);
-      // ensure page state matches what server returned or our requested page
+
       const serverPage = (typeof payload.page === 'number') ? payload.page : p;
       setPage(serverPage);
       pageRef.current = serverPage;
@@ -167,10 +243,8 @@ export default function BrowseMusic() {
     }
   }, []);
 
-  // initial mount
   useEffect(() => {
     mounted.current = true;
-    // load page 1 with current filters/sort
     fetchTracks({ page: 1, limit: limitRef.current, sort: sortRef.current, filters: filtersRef.current });
     return () => {
       mounted.current = false;
@@ -178,7 +252,6 @@ export default function BrowseMusic() {
     };
   }, [fetchTracks]);
 
-  // when filters or sort change: debounce, reset page to 1 and fetch
   useEffect(() => {
     clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {
@@ -189,20 +262,22 @@ export default function BrowseMusic() {
     return () => clearTimeout(debounceRef.current);
   }, [filters, sort, fetchTracks]);
 
-  // when page changes (user pressed next/previous), fetch that page explicitly
   useEffect(() => {
-    // pageRef is already updated by setPage's effect above; just fetch
     fetchTracks({ page, limit: limitRef.current, sort: sortRef.current, filters: filtersRef.current });
   }, [page, fetchTracks]);
 
-  // audio play/pause helpers to ensure a single playing element
   function handlePlay(audioEl) {
     if (!audioEl) return;
     if (playingRef.current && playingRef.current !== audioEl) {
-      try { playingRef.current.pause(); } catch (e) { /* ignore */ }
+      try {
+        playingRef.current.pause();
+      } catch (e) {
+        /* ignore */
+      }
     }
     playingRef.current = audioEl;
   }
+
   function handlePause(audioEl) {
     if (playingRef.current === audioEl) playingRef.current = null;
   }
@@ -222,7 +297,6 @@ export default function BrowseMusic() {
     }
   }
 
-  // Handle download with toast and disable button while downloading
   const handleDownload = (trackId) => {
     if (!user || !user.id) {
       setToast({
@@ -231,7 +305,14 @@ export default function BrowseMusic() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <div>Please log in to download tracks.</div>
             <div>
-              <Button size="sm" variant="light" onClick={() => { setToast(t => ({ ...t, show: false })); navigate('/login'); }}>
+              <Button
+                size="sm"
+                variant="light"
+                onClick={() => {
+                  setToast(t => ({ ...t, show: false }));
+                  navigate('/login');
+                }}
+              >
                 Login
               </Button>
             </div>
@@ -268,20 +349,17 @@ export default function BrowseMusic() {
       />
 
       <style>{`
-        /* Layout fixes to prevent horizontal overflow on small screens */
         .browse-track-item {
           overflow: hidden;
         }
 
-        /* Flex container that holds artwork + content: allow wrapping */
         .browse-track-row {
           display: flex;
           align-items: flex-start;
           gap: 14px;
-          flex-wrap: nowrap; /* prefer no wrap on md+, but child will shrink */
+          flex-wrap: nowrap;
         }
 
-        /* Left artwork column */
         .browse-artwork {
           flex: 0 0 72px;
           width: 72px;
@@ -291,22 +369,69 @@ export default function BrowseMusic() {
           min-width: 72px;
         }
 
-        /* Main content that must be shrinkable and truncate text */
         .browse-content {
           flex: 1 1 auto;
-          min-width: 0; /* CRITICAL for text truncation inside flex items */
+          min-width: 0;
           display: flex;
           flex-direction: column;
           gap: 6px;
         }
 
-        /* Title should truncate and never force horizontal scroll */
-        .browse-title {
+        .browse-top-row {
+          display: flex;
+          align-items: flex-start;
+          justify-content: space-between;
+          gap: 12px;
+          min-width: 0;
+        }
+
+        .browse-title-wrap {
+          min-width: 0;
+          flex: 1 1 auto;
+          overflow: hidden;
+        }
+
+        .browse-title-viewport {
+          overflow: hidden;
+          width: 100%;
+          min-width: 0;
+        }
+
+        .browse-title-text {
+          display: inline-block;
+          max-width: 100%;
           font-size: 16px;
           font-weight: 700;
+          white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
-          white-space: nowrap;
+        }
+
+        .browse-title-text.is-static {
+          display: block;
+        }
+
+        .browse-title-text.is-scrolling {
+          width: max-content;
+          will-change: transform;
+          animation: browse-title-scroll 14s linear infinite;
+        }
+
+        @keyframes browse-title-scroll {
+          0%,
+          12% {
+            transform: translateX(0%);
+          }
+
+          40%,
+          62% {
+            transform: translateX(calc(-1 * var(--scroll-shift)));
+          }
+
+          62.01%,
+          100% {
+            transform: translateX(0%);
+          }
         }
 
         .browse-sub {
@@ -317,7 +442,6 @@ export default function BrowseMusic() {
           white-space: nowrap;
         }
 
-        /* Controls row: preview + actions */
         .browse-controls {
           display: flex;
           align-items: center;
@@ -327,46 +451,62 @@ export default function BrowseMusic() {
         }
 
         .browse-controls-left {
-          min-width: 0; /* again allow shrinking */
+          min-width: 0;
           display: flex;
           align-items: center;
           gap: 12px;
           flex: 1 1 auto;
         }
 
-        /* audio control responsive sizing */
         .browse-audio {
           width: 100%;
           max-width: 220px;
         }
 
-        /* Right-side meta (plays & download) should not grow and will wrap under on very small screens */
         .browse-meta {
           flex: 0 0 auto;
           white-space: nowrap;
           text-align: right;
         }
 
-        /* smaller artwork on narrow screens */
         @media (max-width: 575.98px) {
           .browse-track-row {
             gap: 10px;
           }
+
           .browse-artwork {
             flex: 0 0 56px;
             width: 56px;
             height: 56px;
             min-width: 56px;
           }
-          .browse-title { font-size: 15px; }
-          .browse-audio { max-width: 100%; }
-          .browse-meta { margin-top: 6px; }
+
+          .browse-title-text {
+            font-size: 15px;
+          }
+
+          .browse-sub {
+            font-size: 0.78rem;
+          }
+
+          .browse-audio {
+            max-width: 100%;
+          }
+
+          .browse-meta {
+            margin-top: 6px;
+          }
         }
 
-        /* Prevent ListGroup from adding weird right padding that causes scroll on tiny screens */
         .list-group-flush > .list-group-item {
           padding-right: 12px;
           padding-left: 12px;
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+          .browse-title-text.is-scrolling {
+            animation: none;
+          }
         }
       `}</style>
 
@@ -376,7 +516,6 @@ export default function BrowseMusic() {
         </Col>
       </Row>
 
-      {/* Top controls: filters toggle */}
       <Row className="mb-3 align-items-start">
         <Col xs={12} lg={8} className="mb-2 mb-lg-0">
           <div className="d-flex align-items-center justify-content-between">
@@ -413,10 +552,23 @@ export default function BrowseMusic() {
                 </div>
 
                 <div className="d-flex gap-2">
-                  <Button size="sm" variant="outline-secondary" onClick={() => { setFilters({ district: '', genre: '', mood: '', q: '' }); setSort('new'); }}>
+                  <Button
+                    size="sm"
+                    variant="outline-secondary"
+                    onClick={() => {
+                      setFilters({ district: '', genre: '', mood: '', q: '' });
+                      setSort('new');
+                    }}
+                  >
                     Clear filters
                   </Button>
-                  <Button size="sm" variant="primary" onClick={() => { setShowFilters(false); }}>
+                  <Button
+                    size="sm"
+                    variant="primary"
+                    onClick={() => {
+                      setShowFilters(false);
+                    }}
+                  >
                     Apply & Close
                   </Button>
                 </div>
@@ -445,6 +597,8 @@ export default function BrowseMusic() {
                 const artwork = t.artwork_url || null;
                 const preview = t.preview_url || null;
                 const isDownloading = downloadingId === t.id;
+                const title = String(t.title || '');
+
                 return (
                   <ListGroup.Item key={t.id} className="py-3 browse-track-item">
                     <div className="browse-track-row">
@@ -455,7 +609,10 @@ export default function BrowseMusic() {
                             rounded
                             style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                             alt={`${t.title} artwork`}
-                            onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = '/defaults/track-art.png'; }}
+                            onError={(e) => {
+                              e.currentTarget.onerror = null;
+                              e.currentTarget.src = '/defaults/track-art.png';
+                            }}
                           />
                         ) : (
                           <div style={{ width: '100%', height: '100%', background: '#efefef' }} />
@@ -463,9 +620,10 @@ export default function BrowseMusic() {
                       </div>
 
                       <div className="browse-content">
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-                          <div style={{ minWidth: 0 }}>
-                            <div className="browse-title" title={t.title}>{t.title}</div>
+                        <div className="browse-top-row">
+                          <div className="browse-title-wrap">
+                            <ScrollingTitle text={title} />
+
                             <div className="browse-sub">
                               <span
                                 style={{ cursor: artistName ? 'pointer' : 'default' }}
@@ -508,15 +666,21 @@ export default function BrowseMusic() {
                                 controlsList="nodownload"
                                 className="browse-audio"
                                 src={preview}
-                                onPlay={e => { handlePlay(e.target); recordListenIfNeeded(t); }}
-                                onPause={e => { handlePause(e.target); }}
-                                onEnded={() => { if (playingRef.current) playingRef.current = null; }}
+                                onPlay={e => {
+                                  handlePlay(e.target);
+                                  recordListenIfNeeded(t);
+                                }}
+                                onPause={e => {
+                                  handlePause(e.target);
+                                }}
+                                onEnded={() => {
+                                  if (playingRef.current) playingRef.current = null;
+                                }}
                               />
                             ) : (
                               <div className="small text-muted">No preview</div>
                             )}
                           </div>
-                          {/* meta is already shown to the right of title; this row keeps controls compact */}
                         </div>
                       </div>
                     </div>
@@ -528,13 +692,33 @@ export default function BrowseMusic() {
         </Col>
       </Row>
 
-      {/* pagination */}
       <Row className="mt-3">
         <Col xs={12} className="d-flex justify-content-between align-items-center">
           <div className="small text-muted">Page {page} / {totalPages}</div>
           <div>
-            <Button variant="link" size="sm" disabled={page <= 1} onClick={() => { setPage(p => Math.max(1, p - 1)); pageRef.current = Math.max(1, pageRef.current - 1); }}><FaChevronLeft /></Button>
-            <Button variant="primary" size="sm" disabled={page >= totalPages} onClick={() => { setPage(p => Math.min(totalPages, p + 1)); pageRef.current = Math.min(totalPages, pageRef.current + 1); }} className="ms-2">Next</Button>
+            <Button
+              variant="link"
+              size="sm"
+              disabled={page <= 1}
+              onClick={() => {
+                setPage(p => Math.max(1, p - 1));
+                pageRef.current = Math.max(1, pageRef.current - 1);
+              }}
+            >
+              <FaChevronLeft />
+            </Button>
+            <Button
+              variant="primary"
+              size="sm"
+              disabled={page >= totalPages}
+              onClick={() => {
+                setPage(p => Math.min(totalPages, p + 1));
+                pageRef.current = Math.min(totalPages, pageRef.current + 1);
+              }}
+              className="ms-2"
+            >
+              Next
+            </Button>
           </div>
         </Col>
       </Row>
