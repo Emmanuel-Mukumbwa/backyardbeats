@@ -22,10 +22,15 @@ async function downloadTrackById(trackId, setToast, setDownloadingId) {
     const res = await axios.get(`/download/${trackId}`, { responseType: 'blob' });
     const disposition = (res.headers && (res.headers['content-disposition'] || res.headers['Content-Disposition'])) || '';
     let filename = null;
+
     if (disposition) {
       const fnStar = disposition.match(/filename\*\s*=\s*(?:UTF-8'')?([^;]+)/i);
       if (fnStar && fnStar[1]) {
-        try { filename = decodeURIComponent(fnStar[1].replace(/['"]/g, '')); } catch (e) { filename = fnStar[1].replace(/['"]/g, ''); }
+        try {
+          filename = decodeURIComponent(fnStar[1].replace(/['"]/g, ''));
+        } catch (e) {
+          filename = fnStar[1].replace(/['"]/g, '');
+        }
       }
       if (!filename) {
         const quoted = disposition.match(/filename\s*=\s*"([^"]+)"/i);
@@ -36,6 +41,7 @@ async function downloadTrackById(trackId, setToast, setDownloadingId) {
         if (unquoted && unquoted[1]) filename = unquoted[1].replace(/['"]/g, '').trim();
       }
     }
+
     if (!filename) {
       const title = (res.headers && (res.headers['x-track-title'] || res.headers['X-Track-Title'])) || '';
       const mime = (res.data && res.data.type) || '';
@@ -47,18 +53,22 @@ async function downloadTrackById(trackId, setToast, setDownloadingId) {
       else if (mime.includes('flac')) ext = '.flac';
       filename = `${sanitizeFilename(title || `track-${trackId}`)}${ext}`;
     }
+
     filename = filename && sanitizeFilename(filename) ? filename : `track-${trackId}.mp3`;
+
     const blob = res.data;
     if ((blob.type || '').includes('application/json')) {
       const txt = await blob.text();
       throw new Error(txt);
     }
+
     let fileToSave;
     try {
       fileToSave = new File([blob], filename, { type: blob.type || 'application/octet-stream' });
     } catch (e) {
       fileToSave = blob;
     }
+
     if (window.navigator && window.navigator.msSaveOrOpenBlob) {
       window.navigator.msSaveOrOpenBlob(fileToSave, filename);
     } else {
@@ -71,8 +81,15 @@ async function downloadTrackById(trackId, setToast, setDownloadingId) {
       a.remove();
       window.URL.revokeObjectURL(url);
     }
+
     if (typeof setToast === 'function') {
-      setToast({ show: true, message: `Download started: ${filename}`, variant: 'success', autohide: true, delay: 3500 });
+      setToast({
+        show: true,
+        message: `Download started: ${filename}`,
+        variant: 'success',
+        autohide: true,
+        delay: 3500
+      });
     }
     if (setDownloadingId) setDownloadingId(null);
   } catch (err) {
@@ -89,13 +106,19 @@ export default function NewReleases({ limit = 4, onSelect = () => {} }) {
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
+
   const playingRef = useRef(null);
   const mountedRef = useRef(true);
   const { user, artist: myArtist } = useContext(AuthContext);
   const navigate = useNavigate();
 
-  // Toast and downloading state
-  const [toast, setToast] = useState({ show: false, message: '', variant: 'info', autohide: true, delay: 3500 });
+  const [toast, setToast] = useState({
+    show: false,
+    message: '',
+    variant: 'info',
+    autohide: true,
+    delay: 3500
+  });
   const [downloadingId, setDownloadingId] = useState(null);
 
   // refs to keep latest values and avoid stale closures
@@ -152,11 +175,12 @@ export default function NewReleases({ limit = 4, onSelect = () => {} }) {
     if (myArtist && track.artist && Number(myArtist.id) === Number(track.artist.id)) return;
     try {
       await axios.post('/fan/listens', { track_id: track.id, artist_id: track.artist?.id || null });
-    } catch (e) { /* ignore */ }
+    } catch (e) {
+      /* ignore */
+    }
   }
 
   const handleDownload = (trackId) => {
-    // If not logged in, show persistent toast with Login button
     if (!user || !user.id) {
       setToast({
         show: true,
@@ -164,7 +188,14 @@ export default function NewReleases({ limit = 4, onSelect = () => {} }) {
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <div>Please log in to download tracks.</div>
             <div>
-              <Button size="sm" variant="light" onClick={() => { setToast(t => ({ ...t, show: false })); navigate('/login'); }}>
+              <Button
+                size="sm"
+                variant="light"
+                onClick={() => {
+                  setToast(t => ({ ...t, show: false }));
+                  navigate('/login');
+                }}
+              >
                 Login
               </Button>
             </div>
@@ -198,6 +229,142 @@ export default function NewReleases({ limit = 4, onSelect = () => {} }) {
         position="top-end"
         autohide={typeof toast.autohide === 'boolean' ? toast.autohide : true}
       />
+
+      <style>{`
+        .new-release-item {
+          overflow: hidden;
+        }
+
+        .new-release-row {
+          display: flex;
+          align-items: flex-start;
+          gap: 12px;
+          min-width: 0;
+        }
+
+        .new-release-artwork {
+          flex: 0 0 56px;
+          width: 56px;
+          height: 56px;
+          border-radius: 6px;
+          overflow: hidden;
+          background: #eee;
+          min-width: 56px;
+        }
+
+        .new-release-content {
+          flex: 1 1 auto;
+          min-width: 0;
+        }
+
+        .track-title-viewport {
+          overflow: hidden;
+          min-width: 0;
+          width: 100%;
+        }
+
+        .track-title-static {
+          font-size: 0.95rem;
+          font-weight: 700;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+          display: block;
+        }
+
+        .track-title-marquee {
+          display: inline-flex;
+          align-items: center;
+          gap: 2rem;
+          white-space: nowrap;
+          will-change: transform;
+          min-width: 0;
+          animation: none;
+        }
+
+        .track-title-marquee.is-long {
+          animation: track-marquee 10s linear infinite;
+          padding-right: 2rem;
+        }
+
+        .track-title-marquee span {
+          font-size: 0.95rem;
+          font-weight: 700;
+        }
+
+        @keyframes track-marquee {
+          0% {
+            transform: translateX(0%);
+          }
+          100% {
+            transform: translateX(-50%);
+          }
+        }
+
+        .new-release-meta {
+          flex: 0 0 auto;
+          white-space: nowrap;
+          text-align: right;
+          margin-left: 8px;
+        }
+
+        .new-release-sub {
+          font-size: 0.8rem;
+          color: #6c757d;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+          min-width: 0;
+          margin-top: 3px;
+        }
+
+        .new-release-controls {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          margin-top: 8px;
+          min-width: 0;
+          flex-wrap: wrap;
+        }
+
+        .new-release-audio {
+          width: 140px;
+          height: 30px;
+          max-width: 100%;
+        }
+
+        @media (max-width: 575.98px) {
+          .new-release-row {
+            gap: 10px;
+          }
+
+          .new-release-artwork {
+            flex: 0 0 48px;
+            width: 48px;
+            height: 48px;
+            min-width: 48px;
+          }
+
+          .track-title-static,
+          .track-title-marquee span {
+            font-size: 0.9rem;
+          }
+
+          .new-release-sub {
+            font-size: 0.75rem;
+          }
+
+          .new-release-audio {
+            width: 100%;
+            max-width: 170px;
+          }
+
+          .new-release-meta {
+            margin-left: 4px;
+          }
+        }
+      `}</style>
+
       <div>
         <ListGroup size="sm" variant="flush">
           {items.map(t => {
@@ -208,48 +375,91 @@ export default function NewReleases({ limit = 4, onSelect = () => {} }) {
             const preview = t.preview_url || t.previewUrl || null;
             const isDownloading = downloadingId === t.id;
 
+            const title = String(t.title || '');
+            const isLongTitle = title.length > 28;
+
             return (
-              <ListGroup.Item key={t.id} className="py-2">
-                <div className="d-flex align-items-start">
+              <ListGroup.Item key={t.id} className="py-2 new-release-item">
+                <div className="new-release-row">
                   {artwork ? (
-                    <Image src={artwork} rounded style={{ width: 56, height: 56, objectFit: 'cover', marginRight: 12 }} />
+                    <div className="new-release-artwork">
+                      <Image
+                        src={artwork}
+                        rounded
+                        alt={title}
+                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                        onError={(e) => {
+                          e.currentTarget.onerror = null;
+                          e.currentTarget.src = '/defaults/track-art.png';
+                        }}
+                      />
+                    </div>
                   ) : (
-                    <div style={{ width: 56, height: 56, marginRight: 12, background: '#eee', borderRadius: 6 }} />
+                    <div className="new-release-artwork" />
                   )}
 
-                  <div className="flex-grow-1">
-                    <div className="d-flex align-items-start justify-content-between">
-                      <div style={{ minWidth: 0 }}>
-                        <div
-                          className="small fw-bold text-truncate"
-                          style={{ maxWidth: '100%', cursor: artistId ? 'pointer' : 'default' }}
-                          onClick={() => artistId && onSelect(artistId)}
-                          title={t.title}
-                        >
-                          {t.title}
+                  <div className="new-release-content">
+                    <div className="d-flex align-items-start justify-content-between" style={{ minWidth: 0 }}>
+                      <div style={{ minWidth: 0, flex: '1 1 auto' }}>
+                        <div className="track-title-viewport" title={title}>
+                          {isLongTitle ? (
+                            <div className="track-title-marquee is-long">
+                              <span
+                                onClick={() => artistId && onSelect(artistId)}
+                                style={{ cursor: artistId ? 'pointer' : 'default' }}
+                              >
+                                {title}
+                              </span>
+                              <span
+                                aria-hidden="true"
+                                onClick={() => artistId && onSelect(artistId)}
+                                style={{ cursor: artistId ? 'pointer' : 'default' }}
+                              >
+                                {title}
+                              </span>
+                            </div>
+                          ) : (
+                            <span
+                              className="track-title-static"
+                              onClick={() => artistId && onSelect(artistId)}
+                              style={{ cursor: artistId ? 'pointer' : 'default' }}
+                            >
+                              {title}
+                            </span>
+                          )}
                         </div>
-                        <div className="small text-muted" style={{ marginTop: 4 }}>
-                          {artistName ? `${artistName} ` : ''}{t.genre ? `• ${t.genre} ` : ''}{displayDate ? `• ${new Date(displayDate).toLocaleDateString()}` : ''}
+
+                        <div className="new-release-sub" title={artistName}>
+                          {artistName ? `${artistName} ` : ''}
+                          {t.genre ? `• ${t.genre} ` : ''}
+                          {displayDate ? `• ${new Date(displayDate).toLocaleDateString()}` : ''}
                         </div>
                       </div>
 
-                      <div className="ms-2 text-muted small" style={{ whiteSpace: 'nowrap' }}>
-                        {t.plays ? Number(t.plays) : ''}
+                      <div className="new-release-meta">
+                        <div className="small text-muted">
+                          {t.plays ? Number(t.plays) : ''}
+                        </div>
                       </div>
                     </div>
 
-                    <div className="d-flex align-items-center mt-2">
+                    <div className="new-release-controls">
                       {preview ? (
                         <audio
                           controls
                           controlsList="nodownload"
                           preload="none"
-                          style={{ width: 140, height: 30 }}
+                          className="new-release-audio"
                           src={preview}
-                          onPlay={e => { handlePlay(e.target); recordListenIfNeeded(t); }}
+                          onPlay={e => {
+                            handlePlay(e.target);
+                            recordListenIfNeeded(t);
+                          }}
                           onPause={e => handlePause(e.target)}
-                          onEnded={() => { if (playingRef.current) playingRef.current = null; }}
-                          aria-label={`Preview for ${t.title}`}
+                          onEnded={() => {
+                            if (playingRef.current) playingRef.current = null;
+                          }}
+                          aria-label={`Preview for ${title}`}
                         />
                       ) : (
                         <div className="small text-muted me-2">No preview</div>
@@ -262,8 +472,8 @@ export default function NewReleases({ limit = 4, onSelect = () => {} }) {
                           onClick={() => handleDownload(t.id)}
                           disabled={isDownloading}
                           title="Download track"
-                          className="ms-3 p-0"
-                          aria-label={`Download ${t.title}`}
+                          className="p-0"
+                          aria-label={`Download ${title}`}
                         >
                           {isDownloading ? <Spinner animation="border" size="sm" /> : <FaDownload />}
                         </Button>
@@ -279,8 +489,22 @@ export default function NewReleases({ limit = 4, onSelect = () => {} }) {
         <div className="d-flex justify-content-between align-items-center mt-2">
           <div className="small text-muted">Page {page} / {totalPages}</div>
           <div>
-            <Button variant="link" size="sm" disabled={page <= 1} onClick={() => setPage(p => Math.max(1, p - 1))}><FaChevronLeft /></Button>
-            <Button variant="link" size="sm" disabled={page >= totalPages} onClick={() => setPage(p => Math.min(totalPages, p + 1))}><FaChevronRight /></Button>
+            <Button
+              variant="link"
+              size="sm"
+              disabled={page <= 1}
+              onClick={() => setPage(p => Math.max(1, p - 1))}
+            >
+              <FaChevronLeft />
+            </Button>
+            <Button
+              variant="link"
+              size="sm"
+              disabled={page >= totalPages}
+              onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+            >
+              <FaChevronRight />
+            </Button>
           </div>
         </div>
       </div>
