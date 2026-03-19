@@ -1,14 +1,27 @@
+// src/components/admin/SupportPanel.js
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Table, Button, Badge, Modal, Form, Spinner, Row, Col, InputGroup, FormControl, ListGroup } from 'react-bootstrap';
+import {
+  Table,
+  Button,
+  Badge,
+  Modal,
+  Form,
+  Spinner,
+  Row,
+  Col,
+  InputGroup,
+  ListGroup,
+  Card,
+  Stack
+} from 'react-bootstrap';
 import axios from '../../api/axiosConfig';
 import ToastMessage from '../ToastMessage';
 import LoadingSpinner from '../LoadingSpinner';
 
 export default function SupportPanel() {
-  // show pending by default
   const [tickets, setTickets] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [selected, setSelected] = useState(null); // full ticket object returned by adminGetTicket
+  const [selected, setSelected] = useState(null);
   const [messages, setMessages] = useState([]);
   const [reply, setReply] = useState('');
   const [status, setStatus] = useState('');
@@ -18,15 +31,14 @@ export default function SupportPanel() {
   const [files, setFiles] = useState([]);
   const fileInputRef = useRef(null);
 
-  // toast
   const [toast, setToast] = useState({ show: false, message: '', variant: 'success' });
 
-  // fetchTickets is used from effects and other handlers, so make it stable
   const fetchTickets = useCallback(async () => {
     setLoading(true);
     try {
-      // NOTE: assuming server routes mounted at /support -> admin path is /support/admin
-      const res = await axios.get('/support/admin', { params: { limit: 100, status: filterStatus, q: searchQ } });
+      const res = await axios.get('/support/admin', {
+        params: { limit: 100, status: filterStatus, q: searchQ }
+      });
       setTickets(res.data.tickets || []);
     } catch (err) {
       console.error('fetchTickets', err);
@@ -36,7 +48,6 @@ export default function SupportPanel() {
     }
   }, [filterStatus, searchQ]);
 
-  // call fetchTickets when filterStatus or searchQ changes (via fetchTickets deps)
   useEffect(() => {
     fetchTickets();
   }, [fetchTickets]);
@@ -47,7 +58,6 @@ export default function SupportPanel() {
       setMessages([]);
       setStatus('');
       const res = await axios.get(`/support/admin/${t.id}`);
-      // server returns { ticket, user, messages, attachments, targetSnapshot }
       setSelected(res.data.ticket || t);
       setMessages(res.data.messages || []);
       setStatus((res.data.ticket && res.data.ticket.status) || '');
@@ -60,7 +70,6 @@ export default function SupportPanel() {
   function onFilesChange(e) {
     const incoming = Array.from(e.target.files || []);
     setFiles(prev => [...prev, ...incoming]);
-    // reset input so same files can be re-selected if removed
     if (fileInputRef.current) fileInputRef.current.value = null;
   }
 
@@ -74,16 +83,19 @@ export default function SupportPanel() {
       return;
     }
     if (!selected) return;
+
     setSending(true);
     try {
       const form = new FormData();
       form.append('body', reply);
-      // backend multer expects field 'attachments' (see attachmentsMiddleware.array('attachments', 6))
       files.forEach(f => form.append('attachments', f));
-      await axios.post(`/support/admin/${selected.id}/reply`, form, { headers: { 'Content-Type': 'multipart/form-data' } });
+
+      await axios.post(`/support/admin/${selected.id}/reply`, form, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+
       setReply('');
       setFiles([]);
-      // re-open to refresh messages & attachments
       await openTicket(selected);
       await fetchTickets();
       setToast({ show: true, message: 'Reply sent', variant: 'success' });
@@ -100,8 +112,15 @@ export default function SupportPanel() {
     try {
       await axios.post(`/support/admin/${selected.id}/status`, { status: s });
       setStatus(s);
-      // optionally add a system message locally
-      setMessages(prev => [...prev, { id: `sys-${Date.now()}`, sender_role: 'system', body: `Status changed to "${s}" by admin`, created_at: new Date().toISOString() }]);
+      setMessages(prev => [
+        ...prev,
+        {
+          id: `sys-${Date.now()}`,
+          sender_role: 'system',
+          body: `Status changed to "${s}" by admin`,
+          created_at: new Date().toISOString()
+        }
+      ]);
       await fetchTickets();
       setToast({ show: true, message: `Marked ${s}`, variant: 'success' });
     } catch (err) {
@@ -111,16 +130,71 @@ export default function SupportPanel() {
   }
 
   const statusBadge = (s) => {
-    const bg = s === 'open' ? 'success' : s === 'pending' ? 'warning' : s === 'resolved' ? 'secondary' : s === 'spam' ? 'danger' : 'secondary';
-    return <Badge bg={bg} pill style={{ textTransform: 'capitalize' }}>{s}</Badge>;
+    const bg =
+      s === 'open' ? 'success' :
+      s === 'pending' ? 'warning' :
+      s === 'resolved' ? 'secondary' :
+      s === 'spam' ? 'danger' :
+      'secondary';
+
+    return (
+      <Badge bg={bg} pill className="text-capitalize">
+        {s || 'unknown'}
+      </Badge>
+    );
   };
+
+  const ticketMeta = (t) => (
+    <div className="small text-muted">
+      <div><strong>Type:</strong> {t.type || '—'}</div>
+      <div><strong>User:</strong> {t.user_username || t.user_email || t.user_id || '—'}</div>
+      <div>
+        <strong>Target:</strong>{' '}
+        {t.target_type && t.target_type !== 'none' ? `${t.target_type}:${t.target_id}` : '—'}
+      </div>
+      <div><strong>Updated:</strong> {t.updated_at ? new Date(t.updated_at).toLocaleString() : '—'}</div>
+    </div>
+  );
 
   return (
     <div className="p-3">
-      <h4>Support Tickets</h4>
+      <style>{`
+        .support-panel .ticket-card {
+          border-radius: 1rem;
+          box-shadow: 0 0.125rem 0.5rem rgba(0,0,0,.06);
+        }
+        .support-panel .ticket-subject {
+          font-weight: 600;
+          line-height: 1.25;
+        }
+        .support-panel .message-list {
+          max-height: 350px;
+          overflow-y: auto;
+        }
+        .support-panel .message-bubble {
+          border-radius: 1rem;
+        }
+        @media (max-width: 767.98px) {
+          .support-panel .filters-row > * {
+            width: 100%;
+          }
+        }
+      `}</style>
 
-      <Row className="mb-2 align-items-center">
-        <Col xs="auto">
+      <div className="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-2 mb-3">
+        <div>
+          <h4 className="mb-1">Support Tickets</h4>
+          <div className="text-muted small">
+            Review tickets, reply to users, and update ticket status.
+          </div>
+        </div>
+        <Button variant="secondary" onClick={fetchTickets}>
+          Refresh
+        </Button>
+      </div>
+
+      <Row className="g-2 mb-3 filters-row">
+        <Col xs={12} md="auto">
           <Form.Select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}>
             <option value="">All statuses</option>
             <option value="pending">Pending</option>
@@ -130,77 +204,189 @@ export default function SupportPanel() {
             <option value="closed">Closed</option>
           </Form.Select>
         </Col>
-        <Col>
+        <Col xs={12} md>
           <InputGroup>
-            <FormControl placeholder="Search subject or body..." value={searchQ} onChange={e => setSearchQ(e.target.value)} />
-            <Button onClick={fetchTickets} variant="outline-secondary">Search</Button>
+            <Form.Control
+              placeholder="Search subject or body..."
+              value={searchQ}
+              onChange={e => setSearchQ(e.target.value)}
+            />
+            <Button onClick={fetchTickets} variant="outline-secondary">
+              Search
+            </Button>
           </InputGroup>
-        </Col>
-        <Col xs="auto">
-          <Button onClick={fetchTickets} variant="secondary">Refresh</Button>
         </Col>
       </Row>
 
-      {loading ? <LoadingSpinner /> : (
-        <Table hover responsive>
-          <thead>
-            <tr>
-              <th>#</th><th>Subject</th><th>Type</th><th>Status</th><th>User</th><th>Target</th><th>Updated</th><th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {tickets.map(t => (
-              <tr key={t.id}>
-                <td>{t.id}</td>
-                <td style={{ maxWidth: 300 }}>{t.subject}</td>
-                <td>{t.type}</td>
-                <td>{statusBadge(t.status)}</td>
-                <td>{t.user_username || t.user_email || t.user_id}</td>
-                <td>{t.target_type && t.target_type !== 'none' ? `${t.target_type}:${t.target_id}` : '-'}</td>
-                <td>{new Date(t.updated_at).toLocaleString()}</td>
-                <td>
-                  <Button size="sm" onClick={() => openTicket(t)}>Open</Button>
-                </td>
-              </tr>
-            ))}
-            {tickets.length === 0 && <tr><td colSpan={8} className="text-center text-muted">No tickets</td></tr>}
-          </tbody>
-        </Table>
+      {loading ? (
+        <LoadingSpinner />
+      ) : (
+        <>
+          {/* Desktop table */}
+          <div className="d-none d-md-block">
+            <Table hover responsive className="align-middle">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Subject</th>
+                  <th>Type</th>
+                  <th>Status</th>
+                  <th>User</th>
+                  <th>Target</th>
+                  <th>Updated</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {tickets.map(t => (
+                  <tr key={t.id}>
+                    <td>{t.id}</td>
+                    <td style={{ maxWidth: 300 }}>{t.subject}</td>
+                    <td>{t.type}</td>
+                    <td>{statusBadge(t.status)}</td>
+                    <td>{t.user_username || t.user_email || t.user_id}</td>
+                    <td>{t.target_type && t.target_type !== 'none' ? `${t.target_type}:${t.target_id}` : '-'}</td>
+                    <td>{t.updated_at ? new Date(t.updated_at).toLocaleString() : '—'}</td>
+                    <td>
+                      <Button size="sm" onClick={() => openTicket(t)}>Open</Button>
+                    </td>
+                  </tr>
+                ))}
+                {tickets.length === 0 && (
+                  <tr>
+                    <td colSpan={8} className="text-center text-muted py-4">
+                      No tickets
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </Table>
+          </div>
+
+          {/* Mobile cards */}
+          <div className="d-md-none">
+            {tickets.length === 0 ? (
+              <Card className="ticket-card border-0">
+                <Card.Body className="text-center text-muted py-4">
+                  No tickets
+                </Card.Body>
+              </Card>
+            ) : (
+              <Stack gap={3}>
+                {tickets.map(t => (
+                  <Card key={t.id} className="ticket-card border-0">
+                    <Card.Body className="p-3">
+                      <div className="d-flex justify-content-between align-items-start gap-2 mb-2">
+                        <div>
+                          <div className="ticket-subject">{t.subject || 'Untitled ticket'}</div>
+                          <div className="small text-muted">Ticket #{t.id}</div>
+                        </div>
+                        <div>{statusBadge(t.status)}</div>
+                      </div>
+
+                      {ticketMeta(t)}
+
+                      <div className="pt-3 mt-3 border-top">
+                        <Button className="w-100" size="sm" onClick={() => openTicket(t)}>
+                          Open Ticket
+                        </Button>
+                      </div>
+                    </Card.Body>
+                  </Card>
+                ))}
+              </Stack>
+            )}
+          </div>
+        </>
       )}
 
-      <Modal size="lg" show={!!selected} onHide={() => setSelected(null)}>
+      <Modal
+        size="lg"
+        fullscreen="sm-down"
+        show={!!selected}
+        onHide={() => setSelected(null)}
+        centered
+        scrollable
+      >
         <Modal.Header closeButton>
-          <Modal.Title>Ticket #{selected?.id} — {selected?.subject}</Modal.Title>
+          <Modal.Title>
+            Ticket #{selected?.id} — {selected?.subject}
+          </Modal.Title>
         </Modal.Header>
+
         <Modal.Body>
-          <div className="mb-2"><strong>Status: </strong>{statusBadge(status)}</div>
-          <div className="mb-2"><strong>From: </strong>{selected?.user_username || selected?.user_email || selected?.user_id}</div>
+          <Row className="g-3 mb-3">
+            <Col xs={12} md={4}>
+              <Card className="border-0 shadow-sm h-100">
+                <Card.Body>
+                  <div className="small text-muted mb-1">Status</div>
+                  <div>{statusBadge(status)}</div>
+                </Card.Body>
+              </Card>
+            </Col>
+            <Col xs={12} md={4}>
+              <Card className="border-0 shadow-sm h-100">
+                <Card.Body>
+                  <div className="small text-muted mb-1">From</div>
+                  <div>{selected?.user_username || selected?.user_email || selected?.user_id || '—'}</div>
+                </Card.Body>
+              </Card>
+            </Col>
+            <Col xs={12} md={4}>
+              <Card className="border-0 shadow-sm h-100">
+                <Card.Body>
+                  <div className="small text-muted mb-1">Ticket ID</div>
+                  <div>#{selected?.id}</div>
+                </Card.Body>
+              </Card>
+            </Col>
+          </Row>
 
           {selected?.targetSnapshot && (
-            <div className="mb-3 p-2 border rounded">
-              <strong>Target:</strong> {selected.targetSnapshot.type} — {selected.targetSnapshot.title || selected.targetSnapshot.id}
-              {selected.targetSnapshot.extra?.event_date && <div><small>{selected.targetSnapshot.extra.event_date}</small></div>}
-            </div>
+            <Card className="mb-3 border-0 shadow-sm">
+              <Card.Body>
+                <strong>Target:</strong> {selected.targetSnapshot.type} —{' '}
+                {selected.targetSnapshot.title || selected.targetSnapshot.id}
+                {selected.targetSnapshot.extra?.event_date && (
+                  <div className="text-muted small mt-1">
+                    {selected.targetSnapshot.extra.event_date}
+                  </div>
+                )}
+              </Card.Body>
+            </Card>
           )}
 
-          <div className="mb-2"><strong>Messages</strong></div>
-          <div style={{ maxHeight: 350, overflowY: 'auto' }}>
-            {messages.map(m => (
-              <div key={m.id} className={`border rounded p-2 my-2 ${m.sender_role === 'admin' ? 'bg-light' : ''}`}>
-                <div><small className="text-muted">{m.sender_role} — {new Date(m.created_at).toLocaleString()}</small></div>
-                <div style={{ whiteSpace: 'pre-wrap' }}>{m.body}</div>
-                {/* show message attachments if provided by server in message object */}
-                {m.attachments && m.attachments.length > 0 && (
-                  <ListGroup className="mt-2">
-                    {m.attachments.map(a => (
-                      <ListGroup.Item key={a.id}>
-                        <a href={a.path} target="_blank" rel="noreferrer">{a.filename || a.path}</a>
-                      </ListGroup.Item>
-                    ))}
-                  </ListGroup>
-                )}
-              </div>
-            ))}
+          <div className="mb-2 fw-semibold">Messages</div>
+          <div className="message-list">
+            {messages.length === 0 ? (
+              <div className="text-muted text-center py-4">No messages yet</div>
+            ) : (
+              messages.map(m => (
+                <div
+                  key={m.id}
+                  className={`border rounded p-3 my-2 message-bubble ${m.sender_role === 'admin' ? 'bg-light' : ''}`}
+                >
+                  <div className="d-flex justify-content-between align-items-center gap-2 mb-2">
+                    <small className="text-muted text-capitalize">
+                      {m.sender_role || 'unknown'} • {m.created_at ? new Date(m.created_at).toLocaleString() : '—'}
+                    </small>
+                  </div>
+                  <div style={{ whiteSpace: 'pre-wrap' }}>{m.body}</div>
+
+                  {m.attachments && m.attachments.length > 0 && (
+                    <ListGroup className="mt-3">
+                      {m.attachments.map(a => (
+                        <ListGroup.Item key={a.id}>
+                          <a href={a.path} target="_blank" rel="noreferrer">
+                            {a.filename || a.path}
+                          </a>
+                        </ListGroup.Item>
+                      ))}
+                    </ListGroup>
+                  )}
+                </div>
+              ))
+            )}
           </div>
 
           <Form.Group className="mt-3">
@@ -214,35 +400,36 @@ export default function SupportPanel() {
             />
           </Form.Group>
 
-          <Form.Group className="mt-2">
+          <Form.Group className="mt-3">
             <Form.Label>Attachments</Form.Label>
             <Form.Control type="file" multiple ref={fileInputRef} onChange={onFilesChange} />
-            <Form.Text className="text-muted">
-              These attachments will be included with your reply. Remove any you don't want to send.
+            <Form.Text className="text-muted d-block mt-1">
+              These attachments will be included with your reply.
             </Form.Text>
 
             {files.length > 0 && (
               <ListGroup className="mt-2">
                 {files.map((f, i) => (
-                  <ListGroup.Item key={i} className="d-flex justify-content-between align-items-center">
-                    <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '70%' }}>{f.name}</div>
-                    <div>
-                      <Button size="sm" variant="outline-danger" onClick={() => removeFile(i)}>Remove</Button>
-                    </div>
+                  <ListGroup.Item key={i} className="d-flex justify-content-between align-items-center gap-2">
+                    <div className="text-truncate" style={{ maxWidth: '75%' }}>{f.name}</div>
+                    <Button size="sm" variant="outline-danger" onClick={() => removeFile(i)}>
+                      Remove
+                    </Button>
                   </ListGroup.Item>
                 ))}
               </ListGroup>
             )}
           </Form.Group>
 
-          {/* show ticket-level attachments (files copied or referenced when ticket created) */}
           {selected?.attachments && selected.attachments.length > 0 && (
             <div className="mt-3">
               <strong>Ticket attachments</strong>
               <ListGroup className="mt-2">
                 {selected.attachments.map(a => (
                   <ListGroup.Item key={a.id}>
-                    <a href={a.path} target="_blank" rel="noreferrer">{a.filename || a.path}</a>
+                    <a href={a.path} target="_blank" rel="noreferrer">
+                      {a.filename || a.path}
+                    </a>
                   </ListGroup.Item>
                 ))}
               </ListGroup>
@@ -250,16 +437,44 @@ export default function SupportPanel() {
           )}
         </Modal.Body>
 
-        <Modal.Footer>
-          <Button variant="secondary" onClick={() => changeStatus('resolved')}>Mark Resolved</Button>
-          <Button variant="danger" onClick={() => changeStatus('spam')}>Mark Spam</Button>
-          <Button onClick={sendReply} disabled={sending || (!reply && files.length === 0)}>
-            {sending ? <><Spinner size="sm" animation="border" /> Sending...</> : 'Send Reply'}
+        <Modal.Footer className="d-flex flex-column flex-sm-row gap-2">
+          <Button
+            variant="secondary"
+            className="w-100 w-sm-auto"
+            onClick={() => changeStatus('resolved')}
+          >
+            Mark Resolved
+          </Button>
+          <Button
+            variant="danger"
+            className="w-100 w-sm-auto"
+            onClick={() => changeStatus('spam')}
+          >
+            Mark Spam
+          </Button>
+          <Button
+            className="w-100 w-sm-auto"
+            onClick={sendReply}
+            disabled={sending || (!reply && files.length === 0)}
+          >
+            {sending ? (
+              <>
+                <Spinner size="sm" animation="border" className="me-2" />
+                Sending...
+              </>
+            ) : (
+              'Send Reply'
+            )}
           </Button>
         </Modal.Footer>
       </Modal>
 
-      <ToastMessage show={toast.show} onClose={() => setToast(s => ({ ...s, show: false }))} message={toast.message} variant={toast.variant} />
+      <ToastMessage
+        show={toast.show}
+        onClose={() => setToast(s => ({ ...s, show: false }))}
+        message={toast.message}
+        variant={toast.variant}
+      />
     </div>
   );
 }
