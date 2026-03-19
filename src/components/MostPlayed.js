@@ -1,4 +1,11 @@
-import React, { useEffect, useState, useRef, useContext, useCallback } from 'react';
+import React, {
+  useEffect,
+  useState,
+  useRef,
+  useContext,
+  useCallback,
+  useLayoutEffect
+} from 'react';
 import axios from '../api/axiosConfig';
 import { ListGroup, Spinner, Image, Button } from 'react-bootstrap';
 import { FaDownload, FaChevronLeft, FaChevronRight } from 'react-icons/fa';
@@ -14,6 +21,53 @@ function sanitizeFilename(s) {
     .replace(/\s+/g, ' ')
     .trim()
     .slice(0, 190);
+}
+
+/** title that scrolls, pauses at the end, then restarts without duplicating visible text */
+function ScrollingTitle({ text, onClick, clickable = false, threshold = 28 }) {
+  const viewportRef = useRef(null);
+  const textRef = useRef(null);
+  const [shouldScroll, setShouldScroll] = useState(false);
+  const [shift, setShift] = useState(0);
+
+  const measure = useCallback(() => {
+    const viewport = viewportRef.current;
+    const textEl = textRef.current;
+    if (!viewport || !textEl) return;
+
+    const viewportWidth = viewport.clientWidth || 0;
+    const textWidth = textEl.scrollWidth || 0;
+    const needsScroll = textWidth > viewportWidth + 8 && String(text || '').length > threshold;
+
+    setShouldScroll(needsScroll);
+    setShift(Math.max(0, textWidth - viewportWidth));
+  }, [text, threshold]);
+
+  useLayoutEffect(() => {
+    measure();
+  }, [measure]);
+
+  useEffect(() => {
+    if (!viewportRef.current) return;
+
+    const ro = new ResizeObserver(() => measure());
+    ro.observe(viewportRef.current);
+
+    return () => ro.disconnect();
+  }, [measure]);
+
+  return (
+    <div ref={viewportRef} className="track-title-viewport" title={text || ''}>
+      <span
+        ref={textRef}
+        className={`track-title-text ${shouldScroll ? 'is-scrolling' : 'is-static'}`}
+        style={{ '--scroll-shift': `${shift}px`, cursor: clickable ? 'pointer' : 'default' }}
+        onClick={clickable ? onClick : undefined}
+      >
+        {text}
+      </span>
+    </div>
+  );
 }
 
 /** download helper (forces filename by creating File object) */
@@ -312,41 +366,40 @@ export default function MostPlayed({ limit = 4, onSelect = () => {} }) {
           width: 100%;
         }
 
-        .track-title-static {
+        .track-title-text {
+          display: inline-block;
+          max-width: 100%;
           font-size: 0.95rem;
           font-weight: 700;
+          white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
-          white-space: nowrap;
+        }
+
+        .track-title-text.is-static {
           display: block;
         }
 
-        .track-title-marquee {
-          display: inline-flex;
-          align-items: center;
-          gap: 2rem;
-          white-space: nowrap;
+        .track-title-text.is-scrolling {
+          width: max-content;
           will-change: transform;
-          min-width: 0;
-          animation: none;
+          animation: track-scroll-pause 14s linear infinite;
         }
 
-        .track-title-marquee.is-long {
-          animation: track-marquee 10s linear infinite;
-          padding-right: 2rem;
-        }
-
-        .track-title-marquee span {
-          font-size: 0.95rem;
-          font-weight: 700;
-        }
-
-        @keyframes track-marquee {
-          0% {
+        @keyframes track-scroll-pause {
+          0%,
+          12% {
             transform: translateX(0%);
           }
+
+          40%,
+          62% {
+            transform: translateX(calc(-1 * var(--scroll-shift)));
+          }
+
+          62.01%,
           100% {
-            transform: translateX(-50%);
+            transform: translateX(0%);
           }
         }
 
@@ -394,8 +447,7 @@ export default function MostPlayed({ limit = 4, onSelect = () => {} }) {
             min-width: 48px;
           }
 
-          .track-title-static,
-          .track-title-marquee span {
+          .track-title-text {
             font-size: 0.9rem;
           }
 
@@ -412,6 +464,12 @@ export default function MostPlayed({ limit = 4, onSelect = () => {} }) {
             margin-left: 4px;
           }
         }
+
+        @media (prefers-reduced-motion: reduce) {
+          .track-title-text.is-scrolling {
+            animation: none;
+          }
+        }
       `}</style>
 
       <div>
@@ -423,9 +481,7 @@ export default function MostPlayed({ limit = 4, onSelect = () => {} }) {
             const preview = t.preview_url || t.previewUrl || null;
             const plays = Number(t.plays || 0);
             const isDownloading = downloadingId === t.id;
-
             const title = String(t.title || '');
-            const isLongTitle = title.length > 28;
 
             return (
               <ListGroup.Item key={t.id} className="py-2 most-played-item">
@@ -449,26 +505,11 @@ export default function MostPlayed({ limit = 4, onSelect = () => {} }) {
                   <div className="most-played-content">
                     <div className="d-flex align-items-start justify-content-between" style={{ minWidth: 0 }}>
                       <div style={{ minWidth: 0, flex: '1 1 auto' }}>
-                        <div className="track-title-viewport" title={title}>
-                          {isLongTitle ? (
-                            <div className="track-title-marquee is-long">
-                              <span onClick={() => artistId && onSelect(artistId)} style={{ cursor: artistId ? 'pointer' : 'default' }}>
-                                {title}
-                              </span>
-                              <span aria-hidden="true" onClick={() => artistId && onSelect(artistId)} style={{ cursor: artistId ? 'pointer' : 'default' }}>
-                                {title}
-                              </span>
-                            </div>
-                          ) : (
-                            <span
-                              className="track-title-static"
-                              onClick={() => artistId && onSelect(artistId)}
-                              style={{ cursor: artistId ? 'pointer' : 'default' }}
-                            >
-                              {title}
-                            </span>
-                          )}
-                        </div>
+                        <ScrollingTitle
+                          text={title}
+                          clickable={!!artistId}
+                          onClick={() => artistId && onSelect(artistId)}
+                        />
 
                         <div className="most-played-sub" title={artistName}>
                           {artistName ? `${artistName} ` : ''}
@@ -530,20 +571,10 @@ export default function MostPlayed({ limit = 4, onSelect = () => {} }) {
         <div className="d-flex justify-content-between align-items-center mt-2">
           <div className="small text-muted">Page {page} / {totalPages}</div>
           <div>
-            <Button
-              variant="link"
-              size="sm"
-              disabled={page <= 1}
-              onClick={() => setPage(p => Math.max(1, p - 1))}
-            >
+            <Button variant="link" size="sm" disabled={page <= 1} onClick={() => setPage(p => Math.max(1, p - 1))}>
               <FaChevronLeft />
             </Button>
-            <Button
-              variant="link"
-              size="sm"
-              disabled={page >= totalPages}
-              onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-            >
+            <Button variant="link" size="sm" disabled={page >= totalPages} onClick={() => setPage(p => Math.min(totalPages, p + 1))}>
               <FaChevronRight />
             </Button>
           </div>
