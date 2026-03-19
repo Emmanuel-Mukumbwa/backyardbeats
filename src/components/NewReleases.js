@@ -1,4 +1,11 @@
-import React, { useEffect, useState, useRef, useContext, useCallback } from 'react';
+import React, {
+  useEffect,
+  useState,
+  useRef,
+  useContext,
+  useCallback,
+  useLayoutEffect
+} from 'react';
 import axios from '../api/axiosConfig';
 import { ListGroup, Spinner, Image, Button } from 'react-bootstrap';
 import { FaDownload, FaChevronLeft, FaChevronRight } from 'react-icons/fa';
@@ -14,6 +21,53 @@ function sanitizeFilename(s) {
     .replace(/\s+/g, ' ')
     .trim()
     .slice(0, 190);
+}
+
+/** title that scrolls, pauses at the end, then restarts without duplicating visible text */
+function ScrollingTitle({ text, onClick, clickable = false, threshold = 28 }) {
+  const viewportRef = useRef(null);
+  const textRef = useRef(null);
+  const [shouldScroll, setShouldScroll] = useState(false);
+  const [shift, setShift] = useState(0);
+
+  const measure = useCallback(() => {
+    const viewport = viewportRef.current;
+    const textEl = textRef.current;
+    if (!viewport || !textEl) return;
+
+    const viewportWidth = viewport.clientWidth || 0;
+    const textWidth = textEl.scrollWidth || 0;
+    const needsScroll = textWidth > viewportWidth + 8 && String(text || '').length > threshold;
+
+    setShouldScroll(needsScroll);
+    setShift(Math.max(0, textWidth - viewportWidth));
+  }, [text, threshold]);
+
+  useLayoutEffect(() => {
+    measure();
+  }, [measure]);
+
+  useEffect(() => {
+    if (!viewportRef.current) return;
+
+    const ro = new ResizeObserver(() => measure());
+    ro.observe(viewportRef.current);
+
+    return () => ro.disconnect();
+  }, [measure]);
+
+  return (
+    <div ref={viewportRef} className="track-title-viewport" title={text || ''}>
+      <span
+        ref={textRef}
+        className={`track-title-text ${shouldScroll ? 'is-scrolling' : 'is-static'}`}
+        style={{ '--scroll-shift': `${shift}px`, cursor: clickable ? 'pointer' : 'default' }}
+        onClick={clickable ? onClick : undefined}
+      >
+        {text}
+      </span>
+    </div>
+  );
 }
 
 /** download helper (forces filename by creating File object) */
@@ -91,12 +145,19 @@ async function downloadTrackById(trackId, setToast, setDownloadingId) {
         delay: 3500
       });
     }
+
     if (setDownloadingId) setDownloadingId(null);
   } catch (err) {
     if (typeof setToast === 'function') {
       const message = (err && err.message) ? err.message : 'Download failed';
-      setToast({ show: true, message: `Download failed: ${message}`, variant: 'danger', autohide: false });
+      setToast({
+        show: true,
+        message: `Download failed: ${message}`,
+        variant: 'danger',
+        autohide: false
+      });
     }
+
     if (setDownloadingId) setDownloadingId(null);
   }
 }
@@ -124,8 +185,14 @@ export default function NewReleases({ limit = 4, onSelect = () => {} }) {
   // refs to keep latest values and avoid stale closures
   const pageRef = useRef(page);
   const limitRef = useRef(limit);
-  useEffect(() => { pageRef.current = page; }, [page]);
-  useEffect(() => { limitRef.current = limit; }, [limit]);
+
+  useEffect(() => {
+    pageRef.current = page;
+  }, [page]);
+
+  useEffect(() => {
+    limitRef.current = limit;
+  }, [limit]);
 
   const fetchNew = useCallback(async ({ p = pageRef.current, lim = limitRef.current } = {}) => {
     mountedRef.current = true;
@@ -150,10 +217,11 @@ export default function NewReleases({ limit = 4, onSelect = () => {} }) {
   useEffect(() => {
     mountedRef.current = true;
     fetchNew({ p: 1, lim: limitRef.current });
-    return () => { mountedRef.current = false; };
+    return () => {
+      mountedRef.current = false;
+    };
   }, [fetchNew]);
 
-  // when page changes fetch that page
   useEffect(() => {
     fetchNew({ p: page, lim: limitRef.current });
   }, [page, fetchNew]);
@@ -161,7 +229,9 @@ export default function NewReleases({ limit = 4, onSelect = () => {} }) {
   function handlePlay(audioEl) {
     if (!audioEl) return;
     if (playingRef.current && playingRef.current !== audioEl) {
-      try { playingRef.current.pause(); } catch {}
+      try {
+        playingRef.current.pause();
+      } catch {}
     }
     playingRef.current = audioEl;
   }
@@ -173,10 +243,14 @@ export default function NewReleases({ limit = 4, onSelect = () => {} }) {
   async function recordListenIfNeeded(track) {
     if (!user || !user.id) return;
     if (myArtist && track.artist && Number(myArtist.id) === Number(track.artist.id)) return;
+
     try {
-      await axios.post('/fan/listens', { track_id: track.id, artist_id: track.artist?.id || null });
+      await axios.post('/fan/listens', {
+        track_id: track.id,
+        artist_id: track.artist?.id || null
+      });
     } catch (e) {
-      /* ignore */
+      // ignore
     }
   }
 
@@ -201,7 +275,7 @@ export default function NewReleases({ limit = 4, onSelect = () => {} }) {
             </div>
           </div>
         ),
-        variant: 'success',
+        variant: 'info',
         autohide: false,
         delay: 10000
       });
@@ -209,7 +283,14 @@ export default function NewReleases({ limit = 4, onSelect = () => {} }) {
     }
 
     setDownloadingId(trackId);
-    setToast({ show: true, message: 'Preparing your download...', variant: 'info', autohide: true, delay: 3500 });
+    setToast({
+      show: true,
+      message: 'Preparing your download...',
+      variant: 'info',
+      autohide: true,
+      delay: 3500
+    });
+
     downloadTrackById(trackId, setToast, setDownloadingId);
   };
 
@@ -263,41 +344,40 @@ export default function NewReleases({ limit = 4, onSelect = () => {} }) {
           width: 100%;
         }
 
-        .track-title-static {
+        .track-title-text {
+          display: inline-block;
+          max-width: 100%;
           font-size: 0.95rem;
           font-weight: 700;
+          white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
-          white-space: nowrap;
+        }
+
+        .track-title-text.is-static {
           display: block;
         }
 
-        .track-title-marquee {
-          display: inline-flex;
-          align-items: center;
-          gap: 2rem;
-          white-space: nowrap;
+        .track-title-text.is-scrolling {
+          width: max-content;
           will-change: transform;
-          min-width: 0;
-          animation: none;
+          animation: new-release-scroll-pause 14s linear infinite;
         }
 
-        .track-title-marquee.is-long {
-          animation: track-marquee 10s linear infinite;
-          padding-right: 2rem;
-        }
-
-        .track-title-marquee span {
-          font-size: 0.95rem;
-          font-weight: 700;
-        }
-
-        @keyframes track-marquee {
-          0% {
+        @keyframes new-release-scroll-pause {
+          0%,
+          12% {
             transform: translateX(0%);
           }
+
+          40%,
+          62% {
+            transform: translateX(calc(-1 * var(--scroll-shift)));
+          }
+
+          62.01%,
           100% {
-            transform: translateX(-50%);
+            transform: translateX(0%);
           }
         }
 
@@ -345,8 +425,7 @@ export default function NewReleases({ limit = 4, onSelect = () => {} }) {
             min-width: 48px;
           }
 
-          .track-title-static,
-          .track-title-marquee span {
+          .track-title-text {
             font-size: 0.9rem;
           }
 
@@ -363,6 +442,12 @@ export default function NewReleases({ limit = 4, onSelect = () => {} }) {
             margin-left: 4px;
           }
         }
+
+        @media (prefers-reduced-motion: reduce) {
+          .track-title-text.is-scrolling {
+            animation: none;
+          }
+        }
       `}</style>
 
       <div>
@@ -374,9 +459,7 @@ export default function NewReleases({ limit = 4, onSelect = () => {} }) {
             const artwork = t.artwork_url || t.preview_artwork || null;
             const preview = t.preview_url || t.previewUrl || null;
             const isDownloading = downloadingId === t.id;
-
             const title = String(t.title || '');
-            const isLongTitle = title.length > 28;
 
             return (
               <ListGroup.Item key={t.id} className="py-2 new-release-item">
@@ -401,33 +484,11 @@ export default function NewReleases({ limit = 4, onSelect = () => {} }) {
                   <div className="new-release-content">
                     <div className="d-flex align-items-start justify-content-between" style={{ minWidth: 0 }}>
                       <div style={{ minWidth: 0, flex: '1 1 auto' }}>
-                        <div className="track-title-viewport" title={title}>
-                          {isLongTitle ? (
-                            <div className="track-title-marquee is-long">
-                              <span
-                                onClick={() => artistId && onSelect(artistId)}
-                                style={{ cursor: artistId ? 'pointer' : 'default' }}
-                              >
-                                {title}
-                              </span>
-                              <span
-                                aria-hidden="true"
-                                onClick={() => artistId && onSelect(artistId)}
-                                style={{ cursor: artistId ? 'pointer' : 'default' }}
-                              >
-                                {title}
-                              </span>
-                            </div>
-                          ) : (
-                            <span
-                              className="track-title-static"
-                              onClick={() => artistId && onSelect(artistId)}
-                              style={{ cursor: artistId ? 'pointer' : 'default' }}
-                            >
-                              {title}
-                            </span>
-                          )}
-                        </div>
+                        <ScrollingTitle
+                          text={title}
+                          clickable={!!artistId}
+                          onClick={() => artistId && onSelect(artistId)}
+                        />
 
                         <div className="new-release-sub" title={artistName}>
                           {artistName ? `${artistName} ` : ''}
