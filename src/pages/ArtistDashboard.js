@@ -1,5 +1,5 @@
 // src/pages/ArtistDashboard.js
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
   Tabs,
@@ -23,7 +23,23 @@ import AddTrackModal from '../components/AddTrackModal';
 import AddEventModal from '../components/AddEventModal';
 import TracksPanel from '../components/artist/TracksPanel';
 import EventsPanel from '../components/artist/EventsPanel';
-import { FaMusic, FaCalendarAlt, FaChartLine, FaPlus, FaEdit, FaUserCircle, FaEllipsisV, FaHome } from 'react-icons/fa';
+import {
+  FaMusic,
+  FaCalendarAlt,
+  FaChartLine,
+  FaPlus,
+  FaEdit,
+  FaUserCircle,
+  FaEllipsisV,
+  FaHome
+} from 'react-icons/fa';
+
+const STORAGE_KEY = 'artistDashboard.activeTab';
+const ALLOWED_TABS = ['overview', 'tracks', 'events', 'analytics'];
+
+function normalizeTabKey(key) {
+  return ALLOWED_TABS.includes(key) ? key : 'overview';
+}
 
 export default function ArtistDashboard() {
   const navigate = useNavigate();
@@ -39,6 +55,15 @@ export default function ArtistDashboard() {
   const [districtsList, setDistrictsList] = useState([]);
   const [districtsMapObj, setDistrictsMapObj] = useState({});
 
+  const [playsSummary, setPlaysSummary] = useState({
+    artist_id: null,
+    artist_name: null,
+    total_plays: 0,
+    unique_listeners: 0,
+    last_played: null,
+    tracks: []
+  });
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -47,60 +72,43 @@ export default function ArtistDashboard() {
   const [editingTrack, setEditingTrack] = useState(null);
   const [editingEvent, setEditingEvent] = useState(null);
 
-  const [toast, setToast] = useState({ show: false, message: '', variant: 'warning', delay: 5000 });
+  const [toast, setToast] = useState({
+    show: false,
+    message: '',
+    variant: 'warning',
+    delay: 5000
+  });
 
   const [activeTab, setActiveTab] = useState('overview');
   const tabHideTimerRef = useRef(null);
 
-  useEffect(() => {
-    const initFromHash = (window.location.hash || '').replace('#', '');
-    const saved = localStorage.getItem('artistDashboard.activeTab');
-    const initial = initFromHash || saved || 'overview';
-    const allowed = ['overview', 'tracks', 'events', 'analytics'];
-    setActiveTab(allowed.includes(initial) ? initial : 'overview');
-  }, []);
-
-  const persistTab = (tabKey) => {
-    try {
-      localStorage.setItem('artistDashboard.activeTab', tabKey);
-      const url = new URL(window.location.href);
-      url.hash = `#${tabKey}`;
-      window.history.replaceState(null, '', url.toString());
-    } catch (e) {
-      console.debug('persistTab error', e);
-    }
-  };
-
-  const handleTabSelect = (k) => {
-    if (!k) return;
-    setActiveTab(k);
-    persistTab(k);
-  };
-
-  const backendBase = (() => {
+  const backendBase = useMemo(() => {
     try {
       return (axios && axios.defaults && axios.defaults.baseURL) || process.env.REACT_APP_API_URL || 'http://localhost:3001';
     } catch {
       return process.env.REACT_APP_API_URL || 'http://localhost:3001';
     }
-  })().replace(/\/$/, '');
+  }, []);
 
-  const resolveToBackend = (raw) => {
+  const resolveToBackend = useCallback((raw) => {
     if (!raw) return '';
     if (/^https?:\/\//i.test(raw)) return raw;
-    if (raw.startsWith('/')) return `${backendBase}${raw}`;
-    if (raw.startsWith('uploads/')) return `${backendBase}/${raw}`;
-    return `${backendBase}/uploads/${raw}`;
-  };
 
-  const getEventImageRaw = (ev) => {
+    const base = String(backendBase).replace(/\/$/, '');
+    if (raw.startsWith('/')) return `${base}${raw}`;
+    if (raw.startsWith('uploads/')) return `${base}/${raw}`;
+    return `${base}/uploads/${raw}`;
+  }, [backendBase]);
+
+  const getEventImageRaw = useCallback((ev) => {
     if (!ev) return null;
     return ev.image_url || ev.image || ev.cover_url || ev.photo || ev.imagePath || ev.image_path || null;
-  };
-  const resolveEventImage = (ev) => {
+  }, []);
+
+  const resolveEventImage = useCallback((ev) => {
     const raw = getEventImageRaw(ev);
     return raw ? resolveToBackend(raw) : null;
-  };
+  }, [getEventImageRaw, resolveToBackend]);
 
   function computeArtistStatus(a) {
     if (!a) return 'unknown';
@@ -111,14 +119,20 @@ export default function ArtistDashboard() {
     return 'approved';
   }
 
-  function statusBadge(status) {
-    switch (status) {
-      case 'approved': return <Badge bg="success">Approved</Badge>;
-      case 'pending': return <Badge bg="warning" className="text-dark">Pending</Badge>;
-      case 'rejected': return <Badge bg="danger">Rejected</Badge>;
-      case 'banned': return <Badge bg="danger">Banned</Badge>;
-      case 'deleted': return <Badge bg="secondary">Deleted</Badge>;
-      default: return <Badge bg="secondary">Unknown</Badge>;
+  function statusBadge(value) {
+    switch (value) {
+      case 'approved':
+        return <Badge bg="success">Approved</Badge>;
+      case 'pending':
+        return <Badge bg="warning" className="text-dark">Pending</Badge>;
+      case 'rejected':
+        return <Badge bg="danger">Rejected</Badge>;
+      case 'banned':
+        return <Badge bg="danger">Banned</Badge>;
+      case 'deleted':
+        return <Badge bg="secondary">Deleted</Badge>;
+      default:
+        return <Badge bg="secondary">Unknown</Badge>;
     }
   }
 
@@ -158,9 +172,41 @@ export default function ArtistDashboard() {
     return [];
   }
 
+  const persistTab = useCallback((tabKey) => {
+    try {
+      const nextTab = normalizeTabKey(tabKey);
+      localStorage.setItem(STORAGE_KEY, nextTab);
+      const url = new URL(window.location.href);
+      url.hash = `#${nextTab}`;
+      window.history.replaceState(null, '', url.toString());
+    } catch (e) {
+      console.debug('persistTab error', e);
+    }
+  }, []);
+
+  const handleTabSelect = useCallback((k) => {
+    if (!k) return;
+    const nextTab = normalizeTabKey(k);
+    setActiveTab(nextTab);
+    persistTab(nextTab);
+  }, [persistTab]);
+
+  const showRestrictedToast = useCallback((message, delay = 5000, variant = 'warning') => {
+    setToast({ show: true, message, variant, delay });
+    if (tabHideTimerRef.current) clearTimeout(tabHideTimerRef.current);
+    tabHideTimerRef.current = setTimeout(() => setToast(prev => ({ ...prev, show: false })), delay + 200);
+  }, []);
+
+  const showSuccessToast = useCallback((message, delay = 3500) => {
+    setToast({ show: true, message, variant: 'success', delay });
+    if (tabHideTimerRef.current) clearTimeout(tabHideTimerRef.current);
+    tabHideTimerRef.current = setTimeout(() => setToast(prev => ({ ...prev, show: false })), delay + 200);
+  }, []);
+
   const loadDashboardData = useCallback(async () => {
     setLoading(true);
     setError(null);
+
     try {
       const [gRes, mRes, profileRes, districtsRes] = await Promise.allSettled([
         axios.get('/meta/genres'),
@@ -173,13 +219,17 @@ export default function ArtistDashboard() {
       if (mRes.status === 'fulfilled') setMetaMoods(Array.isArray(mRes.value.data) ? mRes.value.data : []);
 
       const dList = (districtsRes.status === 'fulfilled' && Array.isArray(districtsRes.value.data))
-        ? districtsRes.value.data.map(d => {
-            const id = d.id !== undefined ? String(d.id) : (d.ID !== undefined ? String(d.ID) : '');
-            const name = d.name || d.title || d.label || d.district_name || '';
-            return { id, name };
-          }).filter(x => x.name)
+        ? districtsRes.value.data
+            .map(d => {
+              const id = d.id !== undefined ? String(d.id) : (d.ID !== undefined ? String(d.ID) : '');
+              const name = d.name || d.title || d.label || d.district_name || '';
+              return { id, name };
+            })
+            .filter(x => x.name)
         : [];
+
       setDistrictsList(dList);
+
       const dmap = {};
       dList.forEach(d => {
         if (d && d.id) {
@@ -198,24 +248,53 @@ export default function ArtistDashboard() {
       setArtist(artistData);
 
       if (artistData && artistData.id) {
-        const [tracksRes, eventsRes] = await Promise.allSettled([
+        const [tracksRes, eventsRes, ratingsRes, playsRes] = await Promise.allSettled([
           axios.get('/tracks'),
-          axios.get('/events/my')
+          axios.get('/events/my'),
+          axios.get(`/artists/${artistData.id}/ratings`),
+          axios.get('/artists/me/plays-summary')
         ]);
 
         setTracks(tracksRes.status === 'fulfilled' && Array.isArray(tracksRes.value.data) ? tracksRes.value.data : []);
         setEvents(eventsRes.status === 'fulfilled' && Array.isArray(eventsRes.value.data) ? eventsRes.value.data : []);
 
-        try {
-          const r = await axios.get(`/artists/${artistData.id}/ratings`);
-          setRatings(Array.isArray(r.data) ? r.data : []);
-        } catch {
+        if (ratingsRes.status === 'fulfilled') {
+          setRatings(Array.isArray(ratingsRes.value.data) ? ratingsRes.value.data : []);
+        } else {
           setRatings([]);
+        }
+
+        if (playsRes.status === 'fulfilled') {
+          setPlaysSummary({
+            artist_id: playsRes.value.data?.artist_id ?? artistData.id,
+            artist_name: playsRes.value.data?.artist_name ?? artistData.display_name ?? null,
+            total_plays: Number(playsRes.value.data?.total_plays || 0),
+            unique_listeners: Number(playsRes.value.data?.unique_listeners || 0),
+            last_played: playsRes.value.data?.last_played || null,
+            tracks: Array.isArray(playsRes.value.data?.tracks) ? playsRes.value.data.tracks : []
+          });
+        } else {
+          setPlaysSummary({
+            artist_id: artistData.id,
+            artist_name: artistData.display_name || null,
+            total_plays: 0,
+            unique_listeners: 0,
+            last_played: null,
+            tracks: []
+          });
         }
       } else {
         setTracks([]);
         setEvents([]);
         setRatings([]);
+        setPlaysSummary({
+          artist_id: null,
+          artist_name: null,
+          total_plays: 0,
+          unique_listeners: 0,
+          last_played: null,
+          tracks: []
+        });
       }
     } catch (err) {
       console.error('loadDashboardData error', err);
@@ -226,13 +305,17 @@ export default function ArtistDashboard() {
   }, []);
 
   useEffect(() => {
+    const initFromHash = (window.location.hash || '').replace('#', '');
+    const saved = localStorage.getItem(STORAGE_KEY);
+    const initial = normalizeTabKey(initFromHash || saved || 'overview');
+    setActiveTab(initial);
+
     loadDashboardData();
   }, [loadDashboardData]);
 
-  // Show onboarding toast when redirected from onboarding/edit flow (payload must be serializable)
   useEffect(() => {
     if (location && location.state && location.state.onboardingToast) {
-      const payload = location.state.onboardingToast;
+      const payload = location.state.onboardingToast || {};
       const message = payload.message || 'Your profile is pending verification.';
       const variant = payload.variant || 'success';
       const delay = payload.delay || 10000;
@@ -251,27 +334,19 @@ export default function ArtistDashboard() {
         tabHideTimerRef.current = setTimeout(() => setToast(prev => ({ ...prev, show: false })), delay + 200);
       }
 
-      // clear navigation state so it doesn't reappear after refresh
       navigate(location.pathname, { replace: true, state: {} });
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [location]);
+  }, [location, navigate]);
+
+  useEffect(() => {
+    return () => {
+      if (tabHideTimerRef.current) clearTimeout(tabHideTimerRef.current);
+    };
+  }, []);
 
   const artistStatus = computeArtistStatus(artist);
 
-  function showRestrictedToast(message, delay = 5000, variant = 'warning') {
-    setToast({ show: true, message, variant, delay });
-    if (tabHideTimerRef.current) clearTimeout(tabHideTimerRef.current);
-    tabHideTimerRef.current = setTimeout(() => setToast(prev => ({ ...prev, show: false })), delay + 200);
-  }
-
-  function showSuccessToast(message, delay = 3500) {
-    setToast({ show: true, message, variant: 'success', delay });
-    if (tabHideTimerRef.current) clearTimeout(tabHideTimerRef.current);
-    tabHideTimerRef.current = setTimeout(() => setToast(prev => ({ ...prev, show: false })), delay + 200);
-  }
-
-  const handleAddTrackClick = () => {
+  const handleAddTrackClick = useCallback(() => {
     if (!artist) {
       showRestrictedToast('Complete your artist onboarding first before adding tracks.', 5000, 'warning');
       return;
@@ -294,9 +369,9 @@ export default function ArtistDashboard() {
     }
     setEditingTrack(null);
     setShowTrackModal(true);
-  };
+  }, [artist, artistStatus, showRestrictedToast]);
 
-  const handleAddEventClick = () => {
+  const handleAddEventClick = useCallback(() => {
     if (!artist) {
       showRestrictedToast('Complete your artist onboarding first before creating events.', 5000, 'warning');
       return;
@@ -319,9 +394,9 @@ export default function ArtistDashboard() {
     }
     setEditingEvent(null);
     setShowEventModal(true);
-  };
+  }, [artist, artistStatus, showRestrictedToast]);
 
-  const onTrackSaved = (savedData) => {
+  const onTrackSaved = useCallback(() => {
     const wasEdit = !!editingTrack;
     showSuccessToast(wasEdit ? 'Track updated successfully' : 'Track added successfully');
     setActiveTab('tracks');
@@ -329,9 +404,9 @@ export default function ArtistDashboard() {
     loadDashboardData();
     setShowTrackModal(false);
     setEditingTrack(null);
-  };
+  }, [editingTrack, loadDashboardData, persistTab, showSuccessToast]);
 
-  const onEventSaved = (savedData) => {
+  const onEventSaved = useCallback(() => {
     const wasEdit = !!editingEvent;
     showSuccessToast(wasEdit ? 'Event updated successfully' : 'Event added successfully');
     setActiveTab('events');
@@ -339,9 +414,9 @@ export default function ArtistDashboard() {
     loadDashboardData();
     setShowEventModal(false);
     setEditingEvent(null);
-  };
+  }, [editingEvent, loadDashboardData, persistTab, showSuccessToast]);
 
-  const deleteTrack = async (id) => {
+  const deleteTrack = useCallback(async (id) => {
     if (!window.confirm('Delete this track?')) return;
     try {
       await axios.delete(`/tracks/${id}`);
@@ -350,9 +425,9 @@ export default function ArtistDashboard() {
     } catch (err) {
       showRestrictedToast(err.response?.data?.error || err.message || 'Failed to delete track', 5000, 'danger');
     }
-  };
+  }, [loadDashboardData, showRestrictedToast, showSuccessToast]);
 
-  const deleteEvent = async (id) => {
+  const deleteEvent = useCallback(async (id) => {
     if (!window.confirm('Delete this event?')) return;
     try {
       await axios.delete(`/events/${id}`);
@@ -361,42 +436,53 @@ export default function ArtistDashboard() {
     } catch (err) {
       showRestrictedToast(err.response?.data?.error || err.message || 'Failed to delete event', 5000, 'danger');
     }
-  };
+  }, [loadDashboardData, showRestrictedToast, showSuccessToast]);
 
-  const recordListen = async (track) => {
-    try {
-      axios.post(`/tracks/${track.id}/listen`).catch(() => {});
-    } catch (e) {
-      console.debug('recordListen ignored error', e);
-    }
-  };
-
-  useEffect(() => {
-    return () => {
-      if (tabHideTimerRef.current) clearTimeout(tabHideTimerRef.current);
-    };
+  const recordListen = useCallback((track) => {
+    if (!track || !track.id) return;
+    axios.post(`/tracks/${track.id}/listen`).catch(() => {});
   }, []);
 
-  if (loading) return <div className="text-center py-5"><LoadingSpinner size="lg" /></div>;
-  if (error) return <Alert variant="danger">{error}</Alert>;
-  if (!artist) return <Alert variant="warning">Artist profile not found. <Button size="sm" variant="link" onClick={() => navigate('/onboard')}>Complete onboarding</Button></Alert>;
+  if (loading) {
+    return (
+      <div className="text-center py-5">
+        <LoadingSpinner size="lg" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return <Alert variant="danger">{error}</Alert>;
+  }
+
+  if (!artist) {
+    return (
+      <Alert variant="warning">
+        Artist profile not found.{' '}
+        <Button size="sm" variant="link" onClick={() => navigate('/onboard')}>
+          Complete onboarding
+        </Button>
+      </Alert>
+    );
+  }
 
   const photoRaw = artist.photo_url || artist.photo || null;
   const avatarSrc = photoRaw
     ? (photoRaw.startsWith('http') ? photoRaw : resolveToBackend(photoRaw))
     : `https://ui-avatars.com/api/?name=${encodeURIComponent(artist.display_name || artist.username || 'Artist')}&background=0D8ABC&color=fff&size=256`;
 
-  const genreNames = (() => extractGenreNames(artist))();
-  const moodNames = (() => extractMoodNames(artist))();
+  const genreNames = extractGenreNames(artist);
+  const moodNames = extractMoodNames(artist);
 
   const tracksCount = tracks.length;
   const eventsCount = events.length;
   const ratingsCount = ratings.length;
   const upcomingCount = events.filter(e => e.event_date && new Date(e.event_date) > new Date()).length;
 
-  const status = computeArtistStatus(artist);
+  const totalPlays = Number(playsSummary.total_plays || 0);
+  const uniqueListeners = Number(playsSummary.unique_listeners || 0);
+  const lastPlayedText = playsSummary.last_played ? new Date(playsSummary.last_played).toLocaleString() : '—';
 
-  // --- small helper component for stat blocks ---
   const StatBlock = ({ label, value, className = '' }) => (
     <div className={`text-center ${className}`}>
       <div className="h5 mb-0">{value}</div>
@@ -404,8 +490,10 @@ export default function ArtistDashboard() {
     </div>
   );
 
+  const topPlayedTracks = Array.isArray(playsSummary.tracks) ? playsSummary.tracks.slice(0, 8) : [];
+
   return (
-    <div>
+    <div className="artist-dashboard">
       <ToastMessage
         show={toast.show}
         onClose={() => setToast(prev => ({ ...prev, show: false }))}
@@ -416,38 +504,114 @@ export default function ArtistDashboard() {
         autohide={typeof toast.autohide === 'boolean' ? toast.autohide : true}
       />
 
-      {/* Inline styles for responsive tweaks + FAB */}
       <style>{`
-        /* FAB for mobile quick action */
-        .artist-fab {
+        .artist-dashboard .artist-header {
+          gap: 1rem;
+        }
+
+        .artist-dashboard .artist-header-actions .btn {
+          min-width: 0;
+        }
+
+        .artist-dashboard .artist-tabs {
+          display: flex;
+          flex-wrap: wrap;
+          gap: .5rem;
+          border-bottom: 0;
+        }
+
+        .artist-dashboard .artist-tabs .nav-item {
+          flex: 0 0 auto;
+        }
+
+        .artist-dashboard .artist-tabs .nav-link {
+          border-radius: 999px;
+          white-space: nowrap;
+          padding: .55rem .9rem;
+        }
+
+        .artist-dashboard .artist-tabs .nav-link.active {
+          box-shadow: 0 0.125rem 0.5rem rgba(0,0,0,.06);
+        }
+
+        .artist-dashboard .overview-card .avatar {
+          width: 160px;
+          height: 160px;
+          object-fit: cover;
+          border: 4px solid #f8f9fa;
+        }
+
+        .artist-dashboard .metric-card {
+          border: 0;
+          border-radius: 1rem;
+          box-shadow: 0 0.125rem 0.5rem rgba(0,0,0,.06);
+          height: 100%;
+        }
+
+        .artist-dashboard .track-play-item {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          gap: 1rem;
+          padding: .75rem 0;
+          border-bottom: 1px solid rgba(0,0,0,.08);
+        }
+
+        .artist-dashboard .track-play-item:last-child {
+          border-bottom: 0;
+          padding-bottom: 0;
+        }
+
+        .artist-dashboard .compact-muted {
+          font-size: .875rem;
+          color: #6c757d;
+        }
+
+        .artist-dashboard .mobile-fab {
           position: fixed;
           right: 16px;
           bottom: 20px;
           z-index: 1060;
           display: none;
         }
+
         @media (max-width: 767.98px) {
-          .artist-fab { display: block; }
-        }
-        .artist-header-actions .btn { min-width: 0; }
-        .artist-header-actions .btn .btn-text { display: inline; }
-        @media (max-width: 767.98px) {
-          .artist-header-actions .btn .btn-text { display: none; }
-        }
-        .overview-card .avatar { width: 160px; height: 160px; object-fit: cover; border: 4px solid #f8f9fa; }
-        @media (max-width: 767.98px) {
-          .overview-card .avatar { width: 120px; height: 120px; }
+          .artist-dashboard .mobile-fab {
+            display: block;
+          }
+
+          .artist-dashboard .artist-header {
+            flex-direction: column;
+            align-items: stretch !important;
+          }
+
+          .artist-dashboard .artist-header-actions {
+            width: 100%;
+          }
+
+          .artist-dashboard .artist-header-actions .btn {
+            width: 100%;
+          }
+
+          .artist-dashboard .artist-tabs .nav-link {
+            padding: .45rem .75rem;
+            font-size: .92rem;
+          }
+
+          .artist-dashboard .overview-card .avatar {
+            width: 120px;
+            height: 120px;
+          }
         }
       `}</style>
 
-      <div className="d-flex justify-content-between align-items-center mb-3">
+      <div className="d-flex justify-content-between align-items-center mb-3 artist-header">
         <div>
           <h2 className="mb-0">Artist Dashboard</h2>
           <div className="text-muted small">Manage your tracks, events and profile</div>
         </div>
 
         <div className="artist-header-actions d-flex align-items-center">
-          {/* desktop actions: show labels on md+ */}
           <div className="d-none d-md-inline">
             <Stack direction="horizontal" gap={2}>
               <Button variant="outline-secondary" size="sm" onClick={() => navigate('/')} aria-label="Back to home">
@@ -462,18 +626,25 @@ export default function ArtistDashboard() {
             </Stack>
           </div>
 
-          {/* mobile actions: compact dropdown */}
-          <div className="d-inline d-md-none ms-2">
-            <Dropdown as={ButtonGroup}>
-              <Dropdown.Toggle variant="outline-secondary" size="sm" id="artist-actions-dropdown" aria-label="Actions menu">
-                <FaEllipsisV />
+          <div className="d-inline d-md-none ms-2 w-100">
+            <Dropdown as={ButtonGroup} className="w-100">
+              <Dropdown.Toggle variant="outline-secondary" size="sm" id="artist-actions-dropdown" aria-label="Actions menu" className="w-100">
+                <FaEllipsisV className="me-2" /> Quick Actions
               </Dropdown.Toggle>
-              <Dropdown.Menu align="end">
-                <Dropdown.Item onClick={() => navigate('/')} aria-label="Back to home">Back to Home</Dropdown.Item>
-                <Dropdown.Item onClick={handleAddTrackClick} aria-label="Add track">Add Track</Dropdown.Item>
-                <Dropdown.Item onClick={handleAddEventClick} aria-label="Add event">Add Event</Dropdown.Item>
+              <Dropdown.Menu align="end" className="w-100">
+                <Dropdown.Item onClick={() => navigate('/')} aria-label="Back to home">
+                  <FaHome className="me-2" /> Back to Home
+                </Dropdown.Item>
+                <Dropdown.Item onClick={handleAddTrackClick} aria-label="Add track">
+                  <FaPlus className="me-2" /> Add Track
+                </Dropdown.Item>
+                <Dropdown.Item onClick={handleAddEventClick} aria-label="Add event">
+                  <FaPlus className="me-2" /> Add Event
+                </Dropdown.Item>
                 <Dropdown.Divider />
-                <Dropdown.Item onClick={() => navigate('/onboard')}>Edit Profile</Dropdown.Item>
+                <Dropdown.Item onClick={() => navigate('/onboard')}>
+                  <FaEdit className="me-2" /> Edit Profile
+                </Dropdown.Item>
               </Dropdown.Menu>
             </Dropdown>
           </div>
@@ -483,13 +654,13 @@ export default function ArtistDashboard() {
       <Tabs
         activeKey={activeTab}
         id="artist-dashboard-tabs"
-        className="mb-3"
+        className="mb-3 artist-tabs"
         onSelect={handleTabSelect}
         variant="pills"
         mountOnEnter
       >
         <Tab eventKey="overview" title={<span><FaUserCircle className="me-1" /> Overview</span>}>
-          <Row className="mt-3">
+          <Row className="mt-3 g-3">
             <Col xs={12} md={4}>
               <Card className="text-center p-3 overview-card shadow-sm">
                 <div style={{ display: 'flex', justifyContent: 'center' }}>
@@ -508,10 +679,12 @@ export default function ArtistDashboard() {
                 <Card.Body>
                   <Card.Title className="mt-2 d-flex flex-column align-items-center">
                     <span className="fw-semibold">{artist.display_name}</span>
-                    <span className="mt-2">{statusBadge(status)}</span>
+                    <span className="mt-2">{statusBadge(artistStatus)}</span>
                   </Card.Title>
 
-                  <Card.Text className="text-muted small">{artist.bio || 'No bio yet — tell fans about your music.'}</Card.Text>
+                  <Card.Text className="text-muted small">
+                    {artist.bio || 'No bio yet — tell fans about your music.'}
+                  </Card.Text>
 
                   <div className="d-flex justify-content-center mt-3">
                     <Button variant="outline-primary" size="sm" onClick={() => navigate('/onboard')} aria-label="Edit profile">
@@ -537,7 +710,9 @@ export default function ArtistDashboard() {
 
                   <div className="text-start">
                     <div className="small text-muted">District</div>
-                    <div className="mb-2">{artist.district || (artist.user && artist.user.district ? artist.user.district.name : (artist.user && artist.user.district_id ? `#${artist.user.district_id}` : 'Unknown'))}</div>
+                    <div className="mb-2">
+                      {artist.district || (artist.user && artist.user.district ? artist.user.district.name : (artist.user && artist.user.district_id ? `#${artist.user.district_id}` : 'Unknown'))}
+                    </div>
 
                     <div className="small text-muted">Genres</div>
                     <div className="mb-2">
@@ -549,63 +724,117 @@ export default function ArtistDashboard() {
                       {moodNames.length ? moodNames.map(m => <Badge bg="info" text="dark" className="me-1" key={m}>{m}</Badge>) : <small className="text-muted">No moods</small>}
                     </div>
                   </div>
-
                 </Card.Body>
               </Card>
             </Col>
 
             <Col xs={12} md={8}>
-              <Card className="shadow-sm">
-                <Card.Body>
-                  <div className="d-flex align-items-start justify-content-between">
-                    <h5 className="mb-0"><FaChartLine className="me-2" /> Engagement</h5>
-                    <div className="small text-muted">Updated: {new Date().toLocaleDateString()}</div>
-                  </div>
+              <Stack gap={3}>
+                <Card className="shadow-sm metric-card">
+                  <Card.Body>
+                    <div className="d-flex align-items-start justify-content-between gap-3">
+                      <h5 className="mb-0"><FaChartLine className="me-2" /> Engagement</h5>
+                      <div className="small text-muted">Updated: {new Date().toLocaleDateString()}</div>
+                    </div>
 
-                  <Row className="mt-3">
-                    <Col xs={12} sm={6} md={6}>
-                      <div className="small text-muted">Average Rating</div>
-                      <div className="display-6 text-success">{artist.avg_rating ? Number(artist.avg_rating).toFixed(1) : 'N/A'}</div>
-                    </Col>
-                    <Col xs={12} sm={6} md={6}>
-                      <div className="small text-muted">Upcoming Events</div>
-                      <div className="display-6">{upcomingCount}</div>
-                    </Col>
-                  </Row>
+                    <Row className="mt-3 g-3">
+                      <Col xs={12} sm={6}>
+                        <div className="small text-muted">Average Rating</div>
+                        <div className="display-6 text-success">
+                          {artist.avg_rating ? Number(artist.avg_rating).toFixed(1) : 'N/A'}
+                        </div>
+                      </Col>
+                      <Col xs={12} sm={6}>
+                        <div className="small text-muted">Upcoming Events</div>
+                        <div className="display-6">{upcomingCount}</div>
+                      </Col>
+                      <Col xs={12} sm={6}>
+                        <div className="small text-muted">Total Plays</div>
+                        <div className="display-6">{totalPlays}</div>
+                      </Col>
+                      <Col xs={12} sm={6}>
+                        <div className="small text-muted">Unique Listeners</div>
+                        <div className="display-6">{uniqueListeners}</div>
+                      </Col>
+                    </Row>
 
-                  <hr />
+                    <div className="mt-3 small text-muted">
+                      Last played: {lastPlayedText}
+                    </div>
+                  </Card.Body>
+                </Card>
 
-                  <div className="mt-2">
-                    <h6 className="mb-2">Recent Reviews</h6>
-                    <RatingsList artistId={artist.id} />
-                  </div>
-                </Card.Body>
-              </Card>
+                <Card className="shadow-sm metric-card">
+                  <Card.Body>
+                    <h6 className="mb-3">Top Tracks by Plays</h6>
+                    {topPlayedTracks.length === 0 ? (
+                      <div className="text-muted">No play data yet.</div>
+                    ) : (
+                      <div>
+                        {topPlayedTracks.map((t) => (
+                          <div key={t.id} className="track-play-item">
+                            <div style={{ minWidth: 0 }}>
+                              <div className="fw-semibold text-truncate">{t.title || 'Untitled track'}</div>
+                              <div className="compact-muted">
+                                {t.unique_listeners || 0} listeners • Last played {t.last_played ? new Date(t.last_played).toLocaleString() : '—'}
+                              </div>
+                            </div>
+                            <Badge bg="secondary">{t.plays} plays</Badge>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </Card.Body>
+                </Card>
+              </Stack>
             </Col>
           </Row>
         </Tab>
 
-        <Tab eventKey="tracks" title={<span><FaMusic className="me-1" /> Tracks <Badge bg="secondary" className="ms-2">{tracksCount}</Badge></span>}>
-          <Card className="shadow-sm">
+        <Tab
+          eventKey="tracks"
+          title={
+            <span>
+              <FaMusic className="me-1" />
+              Tracks <Badge bg="secondary" className="ms-2">{tracksCount}</Badge>
+            </span>
+          }
+        >
+          <Card className="shadow-sm mt-3">
             <Card.Body>
               <TracksPanel
                 tracks={tracks}
-                status={status}
-                onEdit={(t) => { setEditingTrack(t); setShowTrackModal(true); }}
+                status={artistStatus}
+                onEdit={(t) => {
+                  setEditingTrack(t);
+                  setShowTrackModal(true);
+                }}
                 onDelete={deleteTrack}
                 resolveToBackend={resolveToBackend}
                 onPlay={recordListen}
+                trackPlays={playsSummary.tracks}
               />
             </Card.Body>
           </Card>
         </Tab>
 
-        <Tab eventKey="events" title={<span><FaCalendarAlt className="me-1" /> Events <Badge bg="secondary" className="ms-2">{eventsCount}</Badge></span>}>
-          <Card className="shadow-sm">
+        <Tab
+          eventKey="events"
+          title={
+            <span>
+              <FaCalendarAlt className="me-1" />
+              Events <Badge bg="secondary" className="ms-2">{eventsCount}</Badge>
+            </span>
+          }
+        >
+          <Card className="shadow-sm mt-3">
             <Card.Body>
               <EventsPanel
                 events={events}
-                onEdit={(e) => { setEditingEvent(e); setShowEventModal(true); }}
+                onEdit={(e) => {
+                  setEditingEvent(e);
+                  setShowEventModal(true);
+                }}
                 onDelete={deleteEvent}
                 resolveEventImage={resolveEventImage}
                 districtsMap={(id) => (districtsMapObj && (districtsMapObj[String(id)] || districtsMapObj[id])) || null}
@@ -614,36 +843,83 @@ export default function ArtistDashboard() {
           </Card>
         </Tab>
 
-        <Tab eventKey="analytics" title={<span><FaChartLine className="me-1" /> Analytics</span>}>
+        <Tab
+          eventKey="analytics"
+          title={
+            <span>
+              <FaChartLine className="me-1" />
+              Analytics <Badge bg="secondary" className="ms-2">{totalPlays}</Badge>
+            </span>
+          }
+        >
           <div className="mt-3">
             <Card className="shadow-sm">
               <Card.Body>
                 <h5>Engagement Metrics</h5>
-                <Row className="mt-3">
-                  <Col md={4} xs={12}>
+
+                <Row className="mt-3 g-3">
+                  <Col md={3} sm={6} xs={12}>
                     <div className="small text-muted">Total Plays</div>
-                    <div className="h4">—</div>
+                    <div className="h4 mb-0">{totalPlays}</div>
                   </Col>
-                  <Col md={4} xs={12}>
+                  <Col md={3} sm={6} xs={12}>
+                    <div className="small text-muted">Unique Listeners</div>
+                    <div className="h4 mb-0">{uniqueListeners}</div>
+                  </Col>
+                  <Col md={3} sm={6} xs={12}>
                     <div className="small text-muted">Average Rating</div>
-                    <div className="h4">{artist.avg_rating ? Number(artist.avg_rating).toFixed(1) : 'N/A'}</div>
+                    <div className="h4 mb-0">{artist.avg_rating ? Number(artist.avg_rating).toFixed(1) : 'N/A'}</div>
                   </Col>
-                  <Col md={4} xs={12}>
+                  <Col md={3} sm={6} xs={12}>
                     <div className="small text-muted">Reviews</div>
-                    <div className="h4">{ratings.length}</div>
+                    <div className="h4 mb-0">{ratingsCount}</div>
                   </Col>
                 </Row>
+
                 <hr />
-                <RatingsList artistId={artist.id} />
+
+                <Row className="g-3">
+                  <Col md={7}>
+                    <h6 className="mb-3">Top Tracks by Plays</h6>
+                    {topPlayedTracks.length === 0 ? (
+                      <div className="text-muted">No play data yet.</div>
+                    ) : (
+                      <div>
+                        {topPlayedTracks.map((t, index) => (
+                          <div key={t.id} className="track-play-item">
+                            <div style={{ minWidth: 0 }}>
+                              <div className="fw-semibold text-truncate">
+                                {index + 1}. {t.title || 'Untitled track'}
+                              </div>
+                              <div className="compact-muted">
+                                {t.unique_listeners || 0} listeners • Last played {t.last_played ? new Date(t.last_played).toLocaleString() : '—'}
+                              </div>
+                            </div>
+                            <Badge bg="secondary">{t.plays} plays</Badge>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </Col>
+                  <Col md={5}>
+                    <h6 className="mb-3">Recent Reviews</h6>
+                    <RatingsList artistId={artist.id} />
+                  </Col>
+                </Row>
               </Card.Body>
             </Card>
           </div>
         </Tab>
       </Tabs>
 
-      {/* Mobile FAB quick action */}
-      <div className="artist-fab">
-        <Button variant="success" className="rounded-circle shadow-lg" style={{ width: 56, height: 56, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={handleAddTrackClick} aria-label="Add track">
+      <div className="mobile-fab">
+        <Button
+          variant="success"
+          className="rounded-circle shadow-lg"
+          style={{ width: 56, height: 56, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+          onClick={handleAddTrackClick}
+          aria-label="Add track"
+        >
           <FaPlus />
         </Button>
       </div>
@@ -665,4 +941,4 @@ export default function ArtistDashboard() {
       />
     </div>
   );
-} 
+}
