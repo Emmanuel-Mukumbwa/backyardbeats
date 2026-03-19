@@ -1,3 +1,4 @@
+// src/components/MostPlayed.js
 import React, {
   useEffect,
   useState,
@@ -48,7 +49,7 @@ function ScrollingTitle({ text, onClick, clickable = false, threshold = 28 }) {
   }, [measure]);
 
   useEffect(() => {
-    if (!viewportRef.current) return;
+    if (!viewportRef.current || typeof ResizeObserver === 'undefined') return;
 
     const ro = new ResizeObserver(() => measure());
     ro.observe(viewportRef.current);
@@ -74,7 +75,8 @@ function ScrollingTitle({ text, onClick, clickable = false, threshold = 28 }) {
 async function downloadTrackById(trackId, setToast, setDownloadingId) {
   try {
     const res = await axios.get(`/download/${trackId}`, { responseType: 'blob' });
-    const disposition = (res.headers && (res.headers['content-disposition'] || res.headers['Content-Disposition'])) || '';
+    const disposition =
+      (res.headers && (res.headers['content-disposition'] || res.headers['Content-Disposition'])) || '';
     let filename = null;
 
     if (disposition) {
@@ -380,8 +382,13 @@ export default function MostPlayed({ limit = 4, onSelect = () => {} }) {
           display: block;
         }
 
+        /* key fix: allow the scrolling state to show the real hidden text */
         .track-title-text.is-scrolling {
+          display: block;
           width: max-content;
+          max-width: none;
+          overflow: visible;
+          text-overflow: clip;
           will-change: transform;
           animation: track-scroll-pause 14s linear infinite;
         }
