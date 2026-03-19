@@ -77,13 +77,12 @@ exports.listArtists = async (req, res, next) => {
     // Default visibility constraints (unless admin override)
     if (!adminOverride) {
       where += ' AND a.is_approved = 1 AND a.is_rejected = 0';
-      // Ensure associated user account is active (not soft-deleted and not banned)
       where += ' AND u.deleted_at IS NULL AND u.banned = 0';
     }
 
     // Pagination / limit (safe caps)
     const maxLimit = 500;
-    let limit = 4; // default page size = 4 (frontend expects 4-per-page)
+    let limit = 4;
     if (req.query.limit) {
       const qlim = Number(req.query.limit);
       if (Number.isInteger(qlim) && qlim > 0) limit = Math.min(qlim, maxLimit);
@@ -141,7 +140,6 @@ exports.listArtists = async (req, res, next) => {
     const items = (rows || []).map(r => {
       const status = r.is_approved ? 'approved' : (r.is_rejected ? 'rejected' : 'pending');
 
-      // genre_names & mood_names -> arrays
       const genres = r.genre_names ? String(r.genre_names).split(',').map(s => s.trim()).filter(Boolean) : [];
       const moods = r.mood_names ? String(r.mood_names).split(',').map(s => s.trim()).filter(Boolean) : [];
 
@@ -183,6 +181,119 @@ exports.listArtists = async (req, res, next) => {
     });
 
     return res.json({ items, total });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * GET /artists/me/plays-summary
+ * Returns play totals for the currently authenticated artist.
+ *
+ * Response:
+ * {
+ *   artist_id,
+ *   total_plays,
+ *   unique_listeners,
+ *   last_played,
+ *   tracks: [
+ *     { id, title, plays, unique_listeners, last_played }
+ *   ]
+ * }
+ */
+exports.getMyPlaysSummary = async (req, res, next) => {
+  try {
+    const user = req.user;
+    if (!user || !user.id) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+
+    const [artistRows] = await pool.query(
+      `
+      SELECT
+        a.id AS artist_id,
+        a.display_name,
+        a.is_approved,
+        a.is_rejected,
+        a.rejection_reason,
+        u.deleted_at,
+        u.banned
+      FROM artists a
+      LEFT JOIN users u ON a.user_id = u.id
+      WHERE a.user_id = ?
+      LIMIT 1
+      `,
+      [user.id]
+    );
+
+    if (!artistRows || artistRows.length === 0) {
+      return res.status(404).json({ error: 'Artist profile not found' });
+    }
+
+    const artist = artistRows[0];
+
+    if (artist.deleted_at) {
+      return res.status(410).json({ status: 'deleted', message: 'Artist account deleted' });
+    }
+
+    if (artist.banned) {
+      return res.status(403).json({ status: 'banned', message: 'Artist account banned' });
+    }
+
+    const artistId = artist.artist_id;
+
+    const [summaryRows] = await pool.query(
+      `
+      SELECT
+        COUNT(l.id) AS total_plays,
+        COUNT(DISTINCT l.user_id) AS unique_listeners,
+        MAX(l.played_at) AS last_played
+      FROM listens l
+      INNER JOIN tracks t ON l.track_id = t.id
+      WHERE t.artist_id = ?
+      `,
+      [artistId]
+    );
+
+    const summary = (summaryRows && summaryRows[0]) || {
+      total_plays: 0,
+      unique_listeners: 0,
+      last_played: null
+    };
+
+    const [trackRows] = await pool.query(
+      `
+      SELECT
+        t.id,
+        t.title,
+        COUNT(l.id) AS plays,
+        COUNT(DISTINCT l.user_id) AS unique_listeners,
+        MAX(l.played_at) AS last_played
+      FROM tracks t
+      LEFT JOIN listens l ON l.track_id = t.id
+      WHERE t.artist_id = ?
+      GROUP BY t.id, t.title
+      ORDER BY plays DESC, t.created_at DESC
+      `,
+      [artistId]
+    );
+
+    const tracks = (trackRows || []).map(r => ({
+      id: r.id,
+      title: r.title,
+      plays: Number(r.plays || 0),
+      unique_listeners: Number(r.unique_listeners || 0),
+      last_played: r.last_played ? new Date(r.last_played).toISOString() : null
+    }));
+
+    return res.json({
+      artist_id: artistId,
+      artist_name: artist.display_name || null,
+      total_plays: Number(summary.total_plays || 0),
+      unique_listeners: Number(summary.unique_listeners || 0),
+      last_played: summary.last_played ? new Date(summary.last_played).toISOString() : null,
+      tracks
+    });
   } catch (err) {
     next(err);
   }
@@ -263,7 +374,7 @@ exports.getArtistById = async (req, res, next) => {
 
     // Determine requester permissions
     const isOwnerRequest = !!(req.user && req.user.id && Number(req.user.id) === Number(artist.user_id));
- 
+
     // Tracks: apply visibility rules
     const trackParams = [artist.id];
     let trackSql = `SELECT id, artist_id, title, preview_url, duration, preview_artwork, genre, release_date, created_at,
@@ -323,7 +434,6 @@ exports.getArtistById = async (req, res, next) => {
       rejection_reason: ev.rejection_reason || null
     }));
 
-    // compute events_count (active events returned)
     const events_count = Array.isArray(events) ? events.length : 0;
 
     // RATINGS: fetch total reviews and average rating from ratings table
@@ -342,7 +452,6 @@ exports.getArtistById = async (req, res, next) => {
 
     // Artist application status
     if (artist.is_approved || adminOverride) {
-      // Approved -> return full artist payload for public view
       const payload = {
         id: artist.id,
         display_name: artist.display_name,
@@ -354,7 +463,6 @@ exports.getArtistById = async (req, res, next) => {
         district_name: artist.district_name || null,
         genres,
         moods,
-        // prefer computed avg_rating from ratings table, fallback to artist.avg_rating if present
         avg_rating: avg_rating_value !== null ? avg_rating_value : (artist.avg_rating || null),
         total_reviews,
         follower_count: artist.follower_count,
@@ -365,8 +473,8 @@ exports.getArtistById = async (req, res, next) => {
           username: artist.username,
           created_at: artist.user_created_at || null
         },
-        tracks, // visibility applied
-        events, // visibility applied
+        tracks,
+        events,
         events_count
       };
 
@@ -386,25 +494,20 @@ exports.getArtistById = async (req, res, next) => {
         status: 'rejected',
         message: artist.rejection_reason ? `Artist application rejected: ${artist.rejection_reason}` : 'Artist application rejected.',
         rejection_reason: artist.rejection_reason || null,
-        // include tracks/events for owner/admin only
         tracks: (adminOverride || isOwnerRequest) ? tracks : undefined,
         events: (adminOverride || isOwnerRequest) ? events : undefined,
         events_count: (adminOverride || isOwnerRequest) ? events_count : undefined,
-        // ratings visible to owner/admin when profile is rejected
         total_reviews: (adminOverride || isOwnerRequest) ? total_reviews : undefined,
         avg_rating: (adminOverride || isOwnerRequest) ? avg_rating_value : undefined
       });
     }
 
-    // Pending verification
     return res.status(403).json({
       status: 'pending',
       message: 'Artist profile is pending verification. It will be visible once approved.',
-      // owner/admin can still see tracks/events
       tracks: (adminOverride || isOwnerRequest) ? tracks : undefined,
       events: (adminOverride || isOwnerRequest) ? events : undefined,
       events_count: (adminOverride || isOwnerRequest) ? events_count : undefined,
-      // ratings visible to owner/admin when profile is pending
       total_reviews: (adminOverride || isOwnerRequest) ? total_reviews : undefined,
       avg_rating: (adminOverride || isOwnerRequest) ? avg_rating_value : undefined
     });
