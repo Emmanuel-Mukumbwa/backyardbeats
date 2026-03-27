@@ -1,9 +1,30 @@
-/*src/styles/custom.css */
+/* src/styles/custom.css */
+@import url('https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;14..32,500;14..32,600;14..32,700&family=Poppins:wght@600;700;800&display=swap');
+
+/* Override Bootstrap body font */
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+}
+
+/* Override Bootstrap headings */
+h1, h2, h3, h4, h5, h6,
+.h1, .h2, .h3, .h4, .h5, .h6 {
+  font-family: 'Poppins', sans-serif;
+  font-weight: 700;
+}
+
+/* Optional: Navbar brand */
+.navbar-brand {
+  font-family: 'Poppins', sans-serif;
+  font-weight: 700;
+}
+
 /* Hero styles for BackyardBeats */
 .bb-hero {
   --hero-height: 360px;
 }
-
+ 
 /* Image column container - framed look (no dark overlay) */
 .hero-image-col .hero-image {
   height: var(--hero-height);
@@ -13,8 +34,8 @@
 
   /* framed styling */
   border-radius: 12px;
-  overflow: hidden; /* ensures rounded corners clip the background */
-  border: 6px solid rgba(16, 128, 62, 0.08); /* subtle greenish border */
+  overflow: hidden;
+  border: 6px solid rgba(16, 128, 62, 0.08);
   box-shadow: 0 10px 30px rgba(0,0,0,0.08), 0 2px 6px rgba(0,0,0,0.04);
 }
 
@@ -54,10 +75,7 @@
 /* small highlight animation for artist card when marker clicked
    Combines a quick animated flash with a subtle fallback box-shadow/transition */
 .card-highlight {
-  /* animation gives a noticeable flash + scale, good for drawing attention */
   animation: cardFlash 1.4s ease-in-out;
-
-  /* persistent/fallback styling (in case animation doesn't run) */
   box-shadow: 0 0 0 4px rgba(40, 167, 69, 0.18);
   transition: box-shadow 0.2s ease-in-out, transform 0.2s ease-in-out;
 }
