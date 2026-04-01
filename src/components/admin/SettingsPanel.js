@@ -634,4 +634,4 @@ export default function SettingsPanel({ settings = {}, onEdit }) {
       />
     </div>
   );
-}
+} 
