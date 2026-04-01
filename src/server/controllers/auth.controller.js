@@ -1,4 +1,3 @@
-// src/server/controllers/auth.controller.js
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const pool = require('../db').pool;
@@ -8,6 +7,17 @@ const JWT_EXPIRY = process.env.JWT_EXPIRY || '24h';
 
 // 30-day window for recovery
 const RECOVERY_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
+
+// Helper to check maintenance mode
+async function isMaintenanceMode() {
+  try {
+    const [rows] = await pool.query('SELECT maintenance_mode FROM site_settings WHERE id = 1');
+    return rows[0]?.maintenance_mode === 1;
+  } catch (err) {
+    console.error('Error checking maintenance mode:', err);
+    return false; // assume no maintenance on error
+  }
+}
 
 async function findUserBy(field, value) {
   const allowed = ['id', 'username', 'email'];
@@ -32,12 +42,18 @@ function daysLeftToRecover(deletedAt) {
   const elapsed = Date.now() - new Date(deletedAt).getTime();
   const leftMs = RECOVERY_WINDOW_MS - elapsed;
   if (leftMs <= 0) return 0;
-  return Math.ceil(leftMs / (24 * 60 * 60 * 1000)); // days remaining rounded up
+  return Math.ceil(leftMs / (24 * 60 * 60 * 1000));
 }
 
 // Register (creates a new user in users table)
 exports.register = async (req, res, next) => {
   try {
+    // If maintenance mode is on, block new registrations
+    const maintenance = await isMaintenanceMode();
+    if (maintenance) {
+      return res.status(503).json({ error: 'Site is under maintenance. New registrations are temporarily disabled.' });
+    }
+
     const { username, email, password, role, district_id } = req.body;
 
     if (!username || !email || !password || !district_id) {
@@ -124,34 +140,36 @@ exports.login = async (req, res, next) => {
       return res.status(401).json({ error: 'Incorrect username/email or password.' });
     }
 
+    // Check maintenance mode – block non‑admin users
+    const maintenance = await isMaintenanceMode();
+    if (maintenance && user.role !== 'admin') {
+      return res.status(503).json({ error: 'Site is under maintenance. Only administrators can log in at this time.' });
+    }
+
     // If account is banned, block login regardless
     if (user.banned) {
       return res.status(403).json({ error: 'This account has been banned. Contact support for assistance.' });
     }
 
-    // Check password first
+    // Check password
     const valid = await bcrypt.compare(password, user.password_hash);
     if (!valid) {
       return res.status(401).json({ error: 'Incorrect username/email or password.' });
     }
 
-    // If account was deactivated, reactivate automatically if inside recovery window
+    // Account reactivation logic
     let reactivated = false;
     if (user.deleted_at) {
       const daysLeft = daysLeftToRecover(user.deleted_at);
       if (daysLeft > 0) {
-        // Reactivate: clear deleted_at and deleted_by
         await pool.query('UPDATE users SET deleted_at = NULL, deleted_by = NULL WHERE id = ?', [user.id]);
         reactivated = true;
-        // reflect change locally for returned user object
         user.deleted_at = null;
       } else {
-        // Recovery window expired — refuse login
         return res.status(410).json({ error: 'This account has been deleted and cannot be recovered.' });
       }
     }
 
-    // Generate JWT token with basic user info
     const token = jwt.sign(
       {
         id: user.id,
