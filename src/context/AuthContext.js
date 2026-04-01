@@ -47,6 +47,8 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [artist, setArtist] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [maintenance, setMaintenance] = useState(false);
+  const [checkingMaintenance, setCheckingMaintenance] = useState(true);
 
   const applyAxiosAuthHeader = (token) => {
     try {
@@ -167,6 +169,17 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  const checkMaintenance = useCallback(async () => {
+    try {
+      const res = await axios.get('/api/maintenance-status');
+      setMaintenance(res.data.maintenance === true);
+    } catch (err) {
+      console.error('Failed to fetch maintenance status', err);
+    } finally {
+      setCheckingMaintenance(false);
+    }
+  }, []);
+
   const verifyAndHydrate = useCallback(async () => {
     setLoading(true);
     try {
@@ -243,6 +256,7 @@ export const AuthProvider = ({ children }) => {
 
   useEffect(() => {
     verifyAndHydrate();
+    checkMaintenance();
 
     const onStorage = (e) => {
       if (!e.key) return;
@@ -259,7 +273,7 @@ export const AuthProvider = ({ children }) => {
 
     window.addEventListener('storage', onStorage);
     return () => window.removeEventListener('storage', onStorage);
-  }, [verifyAndHydrate]);
+  }, [verifyAndHydrate, checkMaintenance]);
 
   useEffect(() => {
     const token = user?.token || sessionStorage.getItem('bb_token') || sessionStorage.getItem('authToken') || null;
@@ -284,7 +298,9 @@ export const AuthProvider = ({ children }) => {
       isAuthenticated,
       isArtist,
       isAdmin,
-      isFan
+      isFan,
+      maintenance,
+      checkingMaintenance,
     }}>
       {children}
     </AuthContext.Provider>
