@@ -118,7 +118,7 @@ router.post('/terms', /* auth, isAdmin, */ admin.createTerm);
 router.put('/terms/:id', /* auth, isAdmin, */ admin.updateTerm);
 router.delete('/terms/:id', /* auth, isAdmin, */ admin.deleteTerm);
 
-// Privacy Policies (admin) - NEW
+// Privacy Policies (admin) - NEW 
 assertHandler('listPrivacy');
 assertHandler('createPrivacy');
 assertHandler('updatePrivacy');
