@@ -1,27 +1,32 @@
-// src/server/controllers/admin/settings.controller.js
-/**
- * Simple settings controller. Currently returns fallback settings.
- * If you want persisted settings, create a `settings` table and update these methods.
- */
+const pool = require('../../db').pool;
 
 exports.getSettings = async (req, res, next) => {
   try {
-    const settings = {
-      siteName: process.env.SITE_NAME || 'BackyardBeats',
-      maintenanceMode: false
-    };
-    res.json({ settings });
-  } catch (err) { 
+    const [rows] = await pool.query('SELECT maintenance_mode FROM site_settings WHERE id = 1');
+    const maintenanceMode = rows[0]?.maintenance_mode === 1;
+    res.json({
+      settings: {
+        siteName: process.env.SITE_NAME || 'BackyardBeats',
+        maintenanceMode,
+      },
+    });
+  } catch (err) {
     next(err);
   }
 };
 
 exports.updateSettings = async (req, res, next) => {
   try {
-    const payload = req.body || {};
-    // Placeholder: validate payload and persist to DB if you add a settings table.
-    // For now, just echo success.
-    res.json({ success: true, settings: payload });
+    const { maintenanceMode } = req.body;
+    const maintenance = maintenanceMode ? 1 : 0;
+    await pool.query('UPDATE site_settings SET maintenance_mode = ? WHERE id = 1', [maintenance]);
+    res.json({
+      success: true,
+      settings: {
+        siteName: process.env.SITE_NAME || 'BackyardBeats',
+        maintenanceMode: !!maintenance,
+      },
+    });
   } catch (err) {
     next(err);
   }
