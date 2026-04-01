@@ -814,7 +814,7 @@ export default function AdminDashboard() {
             confirmState.onConfirm && confirmState.onConfirm();
           } catch (err) {
             console.error('confirm action failed', err);
-            showToast('Action failed', 'danger');
+            showToast('Action failed', 'danger'); 
           } finally {
             setConfirmState(prev => ({ ...prev, show: false }));
           }
