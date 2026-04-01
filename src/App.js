@@ -24,6 +24,7 @@ import BrowseMusic from './pages/BrowseMusic';
 import PlaylistPage from './pages/PlaylistPage';
 import Profile from './pages/Profile';
 import IdleTimer from './components/IdleTimer';
+import Maintenance from './pages/Maintenance';
 
 export default function App() {
   return ( 
@@ -43,6 +44,7 @@ export default function App() {
             <Route path="/music" element={<BrowseMusic />} />
             <Route path="/terms" element={<TermsAndConditions />} />
             <Route path="/privacy" element={<PrivacyPolicy />} />
+            <Route path="/maintenance" element={<Maintenance />} />
             <Route path="/playlist/:id" element={<PlaylistPage />} />
             <Route
               path="/onboard"
