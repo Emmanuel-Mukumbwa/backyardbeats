@@ -1,4 +1,3 @@
-// src/components/Navbar.jsx
 import React, { useContext, useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Navbar as RBNavbar, Nav as RBNav, Container as RBContainer, NavDropdown, Image } from 'react-bootstrap';
@@ -10,7 +9,7 @@ import ToastMessage from './ToastMessage';
 import { FaHome, FaCalendarAlt, FaMusic, FaTools, FaSignInAlt, FaUserPlus } from 'react-icons/fa';
 
 export default function Navbar() {
-  const { user, logout } = useContext(AuthContext);
+  const { user, logout, maintenance, checkingMaintenance, isAdmin } = useContext(AuthContext);
   const navigate = useNavigate();
 
   const [showLogout, setShowLogout] = useState(false);
@@ -52,6 +51,22 @@ export default function Navbar() {
     return () => document.removeEventListener('click', handleDocClick, true);
   }, [expanded]);
 
+  // If still checking maintenance, show minimal navbar to avoid flash
+  if (checkingMaintenance) {
+    return (
+      <div ref={navRef}>
+        <RBNavbar bg="success" variant="dark" expand="lg" sticky="top" className="shadow-soft">
+          <RBContainer>
+            <RBNavbar.Brand as={Link} to="/">BackyardBeats</RBNavbar.Brand>
+          </RBContainer>
+        </RBNavbar>
+      </div>
+    );
+  }
+
+  // Determine whether we are in maintenance mode and the user is not an admin
+  const isMaintenanceForNonAdmin = maintenance && !isAdmin;
+
   return (
     <>
       <ToastMessage show={toast.show} onClose={() => setToast(s => ({ ...s, show: false }))} message={toast.message} variant={toast.variant} />
@@ -63,38 +78,58 @@ export default function Navbar() {
             <RBNavbar.Toggle aria-controls="navbar-nav" />
             <RBNavbar.Collapse id="navbar-nav">
               <RBNav className="ms-auto">
-                <RBNav.Link as={Link} to="/" onClick={() => setExpanded(false)}><FaHome className="me-1" />Home</RBNav.Link>
-                <RBNav.Link as={Link} to="/events" onClick={() => setExpanded(false)}><FaCalendarAlt className="me-1" />Events</RBNav.Link>
-                <RBNav.Link as={Link} to="/music" onClick={() => setExpanded(false)}><FaMusic className="me-1" />Music</RBNav.Link>
 
-                {user?.role === 'admin' && (
-                  <RBNav.Link as={Link} to="/admin" onClick={() => setExpanded(false)}><FaTools className="me-1" />Admin</RBNav.Link>
-                )}
-
-                {user?.role === 'artist' && (
-                  <>
-                    <RBNav.Link as={Link} to="/artist/dashboard" onClick={() => setExpanded(false)}><FaMusic className="me-1" />My Dashboard</RBNav.Link>
-                    {!user?.has_profile && (
-                      <RBNav.Link as={Link} to="/onboard" onClick={() => setExpanded(false)}>Onboard</RBNav.Link>
-                    )}
-                  </>
-                )}
-
-                {user?.role === 'fan' && (
-                  <RBNav.Link as={Link} to="/fan/dashboard" onClick={() => setExpanded(false)}>My Dashboard</RBNav.Link>
-                )}
-
-                {user ? (
-                  <NavUserDropdown
-                    user={user}
-                    display={userDisplay}
-                    onLogout={() => { setShowLogout(true); setExpanded(false); }}
-                    onCloseNav={() => setExpanded(false)}
-                  />
+                {isMaintenanceForNonAdmin ? (
+                  // Maintenance mode: only show login link (or user dropdown if already logged in)
+                  user ? (
+                    <NavUserDropdown
+                      user={user}
+                      display={userDisplay}
+                      onLogout={() => { setShowLogout(true); setExpanded(false); }}
+                      onCloseNav={() => setExpanded(false)}
+                    />
+                  ) : (
+                    <RBNav.Link as={Link} to="/login" onClick={() => setExpanded(false)}>
+                      <FaSignInAlt className="me-1" />Login
+                    </RBNav.Link>
+                  )
                 ) : (
+                  // Normal mode: full navigation
                   <>
-                    <RBNav.Link as={Link} to="/login" onClick={() => setExpanded(false)}><FaSignInAlt className="me-1" />Login</RBNav.Link>
-                    <RBNav.Link as={Link} to="/register" onClick={() => setExpanded(false)}><FaUserPlus className="me-1" />Register</RBNav.Link>
+                    <RBNav.Link as={Link} to="/" onClick={() => setExpanded(false)}><FaHome className="me-1" />Home</RBNav.Link>
+                    <RBNav.Link as={Link} to="/events" onClick={() => setExpanded(false)}><FaCalendarAlt className="me-1" />Events</RBNav.Link>
+                    <RBNav.Link as={Link} to="/music" onClick={() => setExpanded(false)}><FaMusic className="me-1" />Music</RBNav.Link>
+
+                    {user?.role === 'admin' && (
+                      <RBNav.Link as={Link} to="/admin" onClick={() => setExpanded(false)}><FaTools className="me-1" />Admin</RBNav.Link>
+                    )}
+
+                    {user?.role === 'artist' && (
+                      <>
+                        <RBNav.Link as={Link} to="/artist/dashboard" onClick={() => setExpanded(false)}><FaMusic className="me-1" />My Dashboard</RBNav.Link>
+                        {!user?.has_profile && (
+                          <RBNav.Link as={Link} to="/onboard" onClick={() => setExpanded(false)}>Onboard</RBNav.Link>
+                        )}
+                      </>
+                    )}
+
+                    {user?.role === 'fan' && (
+                      <RBNav.Link as={Link} to="/fan/dashboard" onClick={() => setExpanded(false)}>My Dashboard</RBNav.Link>
+                    )}
+
+                    {user ? (
+                      <NavUserDropdown
+                        user={user}
+                        display={userDisplay}
+                        onLogout={() => { setShowLogout(true); setExpanded(false); }}
+                        onCloseNav={() => setExpanded(false)}
+                      />
+                    ) : (
+                      <>
+                        <RBNav.Link as={Link} to="/login" onClick={() => setExpanded(false)}><FaSignInAlt className="me-1" />Login</RBNav.Link>
+                        <RBNav.Link as={Link} to="/register" onClick={() => setExpanded(false)}><FaUserPlus className="me-1" />Register</RBNav.Link>
+                      </>
+                    )}
                   </>
                 )}
               </RBNav>
@@ -119,7 +154,6 @@ function NavUserDropdown({ user, display, onLogout, onCloseNav }) {
   const avatarSrc = avatarUrl && /^https?:\/\//i.test(avatarUrl) ? avatarUrl : (avatarUrl ? `${process.env.REACT_APP_API_URL?.replace(/\/$/, '') || ''}/${avatarUrl}` : null);
 
   // For artists, show "Profile" only if they have completed onboarding (has_profile)
-  // For non‑artists, always show "Profile"
   const showProfile = user?.role !== 'artist' || user?.has_profile;
 
   // Determine profile link destination
