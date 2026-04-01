@@ -10,6 +10,8 @@ const express = require('express');
 const app = express();
 const db = require('./db'); // sequelize instance + pool
 const cors = require('cors');
+const attachUser = require('./middleware/attachUser.middleware');
+const maintenanceMiddleware = require('./middleware/maintenance.middleware');
 
 const FRONTEND_ORIGIN = process.env.FRONTEND_ORIGIN || 'http://localhost:3000';
 const profileRoutes = require('./routes/profile.routes');
@@ -36,6 +38,33 @@ app.use((req, res, next) => {
   console.log(`--> ${req.method} ${req.path}`);
   next();
 });
+
+// ------------------------------------------------------------
+// Public maintenance status endpoint (always accessible)
+// ------------------------------------------------------------
+// Public endpoint to check maintenance status (always accessible)
+app.get('/api/maintenance-status', async (req, res) => {
+  try {
+    // Use db.pool – NOT a standalone 'pool' variable
+    const [rows] = await db.pool.query('SELECT maintenance_mode FROM site_settings WHERE id = 1');
+    const maintenance = rows[0]?.maintenance_mode === 1;
+    res.json({ maintenance });
+  } catch (err) {
+    console.error('Maintenance status error:', err);
+    // If table doesn't exist, treat as maintenance off
+    if (err.code === 'ER_NO_SUCH_TABLE') {
+      console.warn('site_settings table missing – assuming maintenance off');
+      return res.json({ maintenance: false });
+    }
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// ------------------------------------------------------------
+// Attach user (if token) and then check maintenance
+// ------------------------------------------------------------
+app.use(attachUser);
+app.use(maintenanceMiddleware);
 
 // API routes
 app.use('/artistOnboard', require('./routes/artistOnboard.routes'));
@@ -91,7 +120,7 @@ const startServer = async () => {
     });
   } catch (err) {
     console.error('Database connection failed:', err);
-    process.exit(1); 
+    process.exit(1);
   }
 };
 
