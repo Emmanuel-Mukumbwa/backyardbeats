@@ -1,4 +1,3 @@
-//src/api/axiosConfig.js
 import axios from 'axios';
 
 const instance = axios.create({
@@ -6,12 +5,12 @@ const instance = axios.create({
   withCredentials: true,
   timeout: 60000,
 }); 
- 
+
 function debugLog(...args) { 
   if (process.env.NODE_ENV === 'development') {
     console.log(...args);
   }
-}
+} 
 
 instance.interceptors.request.use(
   config => {
@@ -95,6 +94,14 @@ instance.interceptors.response.use(
 
       return Promise.reject(error);
     }
+
+    // New: Handle 503 maintenance mode
+    if (status === 503) {
+      const { pathname } = window.location;
+      if (pathname !== '/maintenance') {
+        window.location.href = '/maintenance';
+      }
+    } 
 
     return Promise.reject(error);
   }
