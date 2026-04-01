@@ -1,4 +1,3 @@
-//src/pages/Login.js
 import React, { useState, useContext, useEffect } from 'react';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { Form, Button, Card, InputGroup, Spinner } from 'react-bootstrap';
@@ -7,7 +6,7 @@ import { AuthContext } from '../context/AuthContext';
 import ToastMessage from '../components/ToastMessage';
 
 export default function Login() {
-  const [identifier, setIdentifier] = useState(''); // accepts email or username
+  const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
 
@@ -92,7 +91,9 @@ export default function Login() {
       const data = await res.json().catch(() => ({}));
 
       if (!res.ok) {
-        if (res.status === 401) {
+        if (res.status === 503) {
+          setError(data?.error || 'Site is under maintenance. Only administrators can log in at this time.');
+        } else if (res.status === 401) {
           setFieldErrors({ identifier: true, password: true });
           setError(data?.error || 'Incorrect email/username or password. Use "Forgot password?" if needed.');
         } else if (res.status === 410) {
@@ -140,23 +141,20 @@ export default function Login() {
       setSuccess('Login successful — redirecting...');
       const NAV_DELAY_MS = 600;
 
-      // --- Redirect validation based on role ---
       const rawRedirect = new URLSearchParams(location.search).get('redirectTo');
       let safeRedirect = (rawRedirect && rawRedirect.startsWith('/')) ? rawRedirect : null;
 
       if (safeRedirect) {
-        // Define allowed base paths for each role
         const allowedBasePaths = {
           admin: ['/admin'],
           artist: ['/artist/dashboard', '/onboard'],
           fan: ['/fan/dashboard'],
         };
-
         const userRole = user.role;
         const allowed = allowedBasePaths[userRole] || [];
         const isAllowed = allowed.some(prefix => safeRedirect.startsWith(prefix));
         if (!isAllowed) {
-          safeRedirect = null; // ignore redirectTo if it's not allowed for this role
+          safeRedirect = null;
         }
       }
 
@@ -166,7 +164,6 @@ export default function Login() {
           return;
         }
 
-        // Fallback to role-based dashboard
         if (user.role === 'artist') {
           navigate(user.has_profile ? '/artist/dashboard' : '/onboard', { replace: true });
         } else if (user.role === 'admin') {
